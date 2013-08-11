@@ -10,13 +10,7 @@
   
   <label for="tempo">Tempo</label><input type="range" name="tempo" value="50" min="10" max="250" id="tempo">
   <input type="button" name="start" value="start" id="start">
-  
-  <script type="text/javascript" charset="utf-8">
-    tempo = 50
-    started = false
-    document.getElementById('tempo').onchange = function(e) {tempo = +e.target.value}
-    document.getElementById('start').onclick = function(e) {if(!started) run(100000); started = true}
-  </script>
+  <input type="button" name="stop" value="stop" id="stop">
   
   <!-- 
     Talk about: 
@@ -127,6 +121,7 @@ ZZZ             111                                         </pre>
     field = []
     copy = []
     generators = []
+    field_length = 80
     
     for(var i=0; i < 25; i++) { // osc
       var gain = context.createGain()
@@ -163,8 +158,12 @@ ZZZ             111                                         </pre>
 
     // read playfield      
     var import_field = function(field_string) {
-      // var generators = []
-      field = field_string.split("\n").map(function(line) {return line.split('') })
+      generators = []
+      field = field_string.split("\n").map(function(line) {
+        line = line.slice(0, field_length) 
+        line = line + Array(field_length - line.length + 1).join(' ')
+        return line.split('') 
+      })
       
       // look for generators
       copy = JSON.parse(JSON.stringify(field))
@@ -438,7 +437,7 @@ ZZZ             111                                         </pre>
     
     var run = function(duration) {
       run_once()
-      if(--duration)
+      if(--duration && started)
         setTimeout(function() {run(duration)}, 1000/tempo)
     }
     
@@ -532,6 +531,37 @@ ZZZ             111                                         </pre>
       foo = function(n) {setTimeout(function() {show_field(field = step_field(field, generators, time++)); if(n>0) foo(n-1) }, 0)}
       
     */
+    
+
+    tempo = 50
+    started = false
+    document.getElementById('tempo').onchange = function(e) {tempo = +e.target.value}
+    document.getElementById('start').onclick = function(e) {
+      if(!started) {
+        started = true
+        import_field(document.getElementById('field').textContent)
+        // document.getElementById('field').removeEventListener("DOMCharacterDataModified", blargh)
+        run(100000)
+      }
+    }
+    document.getElementById('stop').onclick = function(e) {
+      started = false
+    }
+
+    // var blargh = function(e) {
+    //   import_field(e.target.textContent)
+    // }
+    // document.getElementById('field').addEventListener("DOMCharacterDataModified", blargh)
+    
+    // document.getElementById('field').onfocus = function(e) {
+    //   if(!started) {
+    //     document.getElementById('field').addEventListener("DOMCharacterDataModified", blargh)
+    //   }
+    // }
+    // 
+    // document.getElementById('field').onblur = function(e) {
+    //   document.getElementById('field').removeEventListener("DOMCharacterDataModified", blargh)
+    // }
     
   </script>
 </body>
