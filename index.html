@@ -1,28 +1,34 @@
 <html>
+  <head>
+    <title>Symphony of Construction</title>
+    <style>
+      .hidden {display: none}
+    </style>
+  </head>
 <body>
   <canvas id="canvas" width="1100"></canvas>
 
-  <pre id="foo" contentEditable=true>
-      Q                                   
-              S           T         9     
+  <pre id="preset1" contentEditable="true" class="hidden">
+      Q                             9     
+              S                    2     
                                           
-   5                                      
+   5                          TT          
    5                      4               
    3             XX                       
    3        8                             
                                           
                                           
             2                             
-                          GG      #       
-                                  #       
-AA              MM    7           #       
-AA                                #     11
+                          GG      9       
+                                  9       
+AA              MM    7           9       
+AA                                9     11
                                         11</pre>
 
-  <pre id="field" contentEditable=true>
-AAAAAAA           11111111                
-CCCCCCC                   11111111        
-EEEEEEE                           11111111
+  <pre id="preset2" contentEditable="true" class="hidden">
+AAAAAAA           33333333                
+CCCCCCC                   33333333        
+EEEEEEE                           33333333
                                           
                                           
                                           
@@ -37,36 +43,65 @@ KKKKKKKK                        11111111
                                           
                                           </pre>
 
+  <pre id="field" contentEditable="true">
+AAAAA                  44444                                
+AAAAA                  44444                                
+                                                            
+CCCCC                   99999                               
+CCCCC                   99999                               
+                                                            
+EEEEE                    4444                               
+EEEEE                    4444                               
+                                                            
+     WW                       99                            
+     WW                       99                            
+     WW                       99                            
+     WW                       99                            
+     WW                       99                            
+     WW                       99                            
+     WW                       99                            
+                                                            
+                                                            
+ZZZZ            1111                                        
+ZZZZ            1111                                        
+ZZZZ            1111                                        
+ZZZZ            1111                                        
+ZZZ             111                                         
+                                          </pre>
+
   <script>
     var context = new window.webkitAudioContext()
       , analyser = context.createAnalyser()
       , maingain = context.createGainNode()
 
-    maingain.connect(analyser)
+    maingain.connect(context.destination)
+    // maingain.connect(analyser)
 
     analyser.smoothingTimeConstant = 0.1
     analyser.fftSize = 1024
 
     javascriptNode = context.createJavaScriptNode(2048, 1, 1)
-    javascriptNode.connect(context.destination)  // why doesn't this play the sound?
+    // javascriptNode.connect(context.destination)  // why doesn't this play the sound?
     
-    analyser.connect(javascriptNode)
-    analyser.connect(context.destination)
+    // analyser.connect(javascriptNode)
+    // analyser.connect(context.destination)
 
 
     // build our symphony of destruction
     oscs = []
     gains = []
     filters = {}
-    freqs = [ 480,   540,   600,  640,   720,   800,   900
+    freqs = [ 240,   270,   300,  320,   360,   400,   450
+            , 480,   540,   600,  640,   720,   800,   900
             , 960,   1080,  1200, 1280,  1440,  1600,  1800
             , 1920,  2160,  2400, 2560,  2880,  3200,  3600
             , 3840,  4320,  4800, 5120,  5760,  6400,  7200 ]
     
     field = []
     copy = []
+    generators = []
     
-    for(var i=0; i < 27; i++) { // osc
+    for(var i=0; i < 25; i++) { // osc
       var gain = context.createGain()
       gain.connect(maingain)
       gain.gain.value = 0
@@ -80,32 +115,28 @@ KKKKKKKK                        11111111
       gains.push(gain)
       oscs.push(osc)
     }
+    
+    // Z is special
+    var gain  = context.createGain()
+      , noise = context.createJavaScriptNode(4096, 1, 1)
 
-//    for(var j=9; j--;) { // filter
-//      var filter = gain = context.createGain()
-//      filter.connect(maingain)
-//      filter.gain.value = (j+1) / 10
-//      filters[j] = {filter: filter, notes: []}
-//      
-//      for(var i=26; i--;) { // osc
-//        var gain = context.createGain()
-//        gain.connect(filter)
-//        gain.gain.value = 0
-//        
-//        var osc = context.createOscillator()
-//        osc.frequency.value = freqs[i]
-//        osc.start(1)
-//        osc.connect(gain)
-//        
-//        filters[j].notes.push(gain)
-//        gains.push(gain)
-//        oscs.push(osc)
-//      }
-//    }
+    gain.gain.value = 0
+    gain.connect(maingain)
+    noise.connect(gain)
+    gains.push(gain)
+    oscs.push(noise)
+
+    noise.onaudioprocess = function(e) {
+      var output = e.outputBuffer.getChannelData(0)
+      for (var i = 0; i < 4096; i++) {
+        output[i] = Math.random() * 2 - 1
+      }
+    }
+    
 
     // read playfield      
     var import_field = function(field_string) {
-      var generators = []
+      // var generators = []
       field = field_string.split("\n").map(function(line) {return line.split('') })
       
       // look for generators
@@ -149,6 +180,8 @@ KKKKKKKK                        11111111
         }
       }
       
+      copy = JSON.parse(JSON.stringify(field)) // oy vey
+      
       return [field, generators]
     }
 
@@ -156,27 +189,18 @@ KKKKKKKK                        11111111
     var step_field = function(field, generators, time) {
       deactivate(time)
       
-      // prep our copy
-      // var copy = []
-      // for(var y=0, l=field.length; y < l; y++) {
-      //   if(!copy[y])
-      //     copy[y] = []
-      //   for(var x=0, k=field[y].length; x < k; x++) {
-      //     if(!/[a-z&'()*+,\-.\/]/.test(field[y][x]))
-      //       copy[y][x] = field[y][x]
-      //     else
-      //       copy[y][x] = ' '
-      //   }
-      // }
-      
-      // var copy = JSON.parse(JSON.stringify(field))
+      for(var y=0, l=field.length; y < l; y++) { // ugh yuck yuck
+        for(var x=0, k=field[y].length; x < k; x++) {
+          copy[y][x] = field[y][x]
+        }
+      }
       
       // move things
       for(var y=0, l=field.length; y < l; y++) {
         for(var x=0, k=field[y].length; x < k; x++) {
           var old_c = field[y][x]
             , is_alpha = /[a-z]/.test(old_c)
-            
+          
           if(/[a-z&'()*+,\-.\/]/.test(old_c)) {
             // where do i want to go?
             // TODO: A* algo goes here
@@ -190,29 +214,16 @@ KKKKKKKK                        11111111
               , new_c = field[new_y][new_x]
             
             // collision?
-            if(  (/[a-z]/.test(old_c) && /[&'()*+,\-.\/]/.test(new_c))
-              || (/[a-z]/.test(new_c) && /[&'()*+,\-.\/]/.test(old_c)) ) {
-              // console.log('Oh! ' + copy[y][x] + ' ran smack into ' + copy[new_y][new_x] + '!! Ouch!')
+            if(collide(time, old_c, new_c)) {
               copy[y][x] = ' '
               copy[new_y][new_x] = ' '
-              field[y][x] = ' ' // yuck
-              field[new_y][new_x] = ' ' // yuck
-              
-              var num   = Math.min(old_c.charCodeAt(0), new_c.charCodeAt(0)) - 37
-                , alpha = Math.max(old_c.charCodeAt(0), new_c.charCodeAt(0)) - 97
-              
-              activate(time, num, alpha)
             }
-
             // can i move there?
             else if(new_c == ' ') {
               copy[y][x] = ' '
               copy[new_y][new_x] = old_c
             }
             
-          }
-          else {
-            copy[y][x] = field[y][x]
           }
           
         }
@@ -223,22 +234,49 @@ KKKKKKKK                        11111111
         var gen = generators[i]
           , is_alpha = /[A-Z]/.test(gen.note)
           , spawn_col = bound(is_alpha ? gen.col + gen.width : gen.col - 1, field[gen.row].length)
+          , modulo = (21 - Math.min(gen.count, 20)) * 5
           
-        if(!(time % (gen.count*5 + 1))) {
+        if(!(time % modulo)) {
           // copy[gen.row - 1 < 0 ? copy.length-1 : gen.row - 1][gen.col] = // TODO: look before we smash
-          copy[gen.row][spawn_col] = // TODO: look before we smash
-            gen.note.charCodeAt(0) > 57 
-            ? gen.note.toLowerCase() 
-            : String.fromCharCode(gen.note.charCodeAt(0) - 10)
+
+          var old_c    = copy[gen.row][spawn_col]
+            , new_note = gen.note.charCodeAt(0) > 57 
+                         ? gen.note.toLowerCase() 
+                         : String.fromCharCode(gen.note.charCodeAt(0) - 10)
+
+          if(old_c != ' ') { // look before we smash
+            if(collide(time, old_c, new_note)) {
+              copy[gen.row][spawn_col] = ' '
+            }
+          } else {
+            copy[gen.row][spawn_col] = new_note
+          }
+
         }
       }
       
       return copy
     }
     
+    var collide = function(time, old_c, new_c) {
+      if(  (/[a-z]/.test(old_c) && /[&'()*+,\-.\/]/.test(new_c))
+        || (/[a-z]/.test(new_c) && /[&'()*+,\-.\/]/.test(old_c)) ) {
+        // console.log('Oh! ' + copy[y][x] + ' ran smack into ' + copy[new_y][new_x] + '!! Ouch!')
+        // field[y][x] = ' ' // yuck
+        // field[new_y][new_x] = ' ' // yuck
+        
+        var num   = Math.min(old_c.charCodeAt(0), new_c.charCodeAt(0)) - 37
+          , alpha = Math.max(old_c.charCodeAt(0), new_c.charCodeAt(0)) - 97
+        
+        activate(time, num, alpha)
+        
+        return true
+      }
+    }
+    
     var show_field = function(field) {
       var flatfield = field.map(function(line){ return line.join('') }).join("\n")
-      document.getElementById('field').innerText = flatfield
+      document.getElementById('field').innerText = field.map(function(line){ return line.join('') }).join("\n")
     }
 
     var bound = function(num, limit) {
@@ -258,19 +296,29 @@ KKKKKKKK                        11111111
       //   , gain = filter.notes[alpha]
         
       var gain = gains[alpha]
-        , byetime = time + (num * 10)
+        , byetime = time + (num * 1)
         
-      gain.gain.value = 1
+      // gain.gain.value = 1
       if(!active[byetime]) 
         active[byetime] = []
       active[byetime].push({num: num, alpha: alpha, gain: gain})
+      
+      var now = context.currentTime;
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(1, now + 0.05);
+      gain.gain.linearRampToValueAtTime(0, now + 0.05 + (0.05 * num) );
+
+      // gain.gain.exponentialRampToValueAtTime(1.0, now + 0.01);
+      // gain.gain.exponentialRampToValueAtTime(0, now + 0.05);
+      
     }
     
     var deactivate = function(time) {
       if(active[time]) {
         while(active[time].length) {
           var act = active[time].pop()
-          act.gain.gain.value = 0
+          // act.gain.gain.value = 0
         }
         delete active[time]
       }
@@ -287,25 +335,32 @@ KKKKKKKK                        11111111
     var run = function(duration) {
       run_once()
       if(--duration)
-        setTimeout(function() {run(duration)}, 0)
+        setTimeout(function() {run(duration)}, 10)
       else
         deactivate_all()
     }
     
     var run_once = function() {
-      field = step_field(field, generators, time++)
+      // field = step_field(field, generators, time++)
+      step_field(field, generators, time++)
+      temp = field
+      field = copy
+      copy = temp
       show_field(field)
     }
     
 
     
     var field_text = document.getElementById('field').innerText
-      , result = import_field(field_text)
-      , field = result[0]
-      , generators = result[1]
+      // , result = import_field(field_text)
+      // , field = result[0]
+      // , generators = result[1]
       , time = 1
+      , temp = []
 
-    var foo = function(n) {setTimeout(function() {show_field(field = step_field(field, generators, time++)); if(n>0) foo(n-1) }, 0)}
+    import_field(field_text)
+
+    // var foo = function(n) {setTimeout(function() {show_field(field = step_field(field, generators, time++)); if(n>0) foo(n-1) }, 0)}
 
 
     // viz stuff... yurmx
