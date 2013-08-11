@@ -7,6 +7,36 @@
   </head>
 <body>
   <canvas id="canvas" width="1100"></canvas>
+  
+  <label for="tempo">Tempo</label><input type="range" name="tempo" value="50" min="10" max="250" id="tempo">
+  <input type="button" name="start" value="start" id="start">
+  
+  <script type="text/javascript" charset="utf-8">
+    tempo = 50
+    started = false
+    document.getElementById('tempo').onchange = function(e) {tempo = +e.target.value}
+    document.getElementById('start').onclick = function(e) {if(!started) run(100000); started = true}
+  </script>
+  
+  <!-- 
+    Talk about: 
+    - 260 osc/gain combos (50% cpu w/ all gains 0) vs 26
+    - cell autom style processing w/ immutable boards -> memleak (-> GC, segmented generations), so flip-flop
+    - cellauto -> no cheating, (so any copy runs) but makes pathfinding more expensive and limits customization
+    - setTimeout vs context.currentTime
+    - Z is noise / hihat
+    - later, allow control over individual sounds / effects
+    - allow saving boards
+    
+    Do:
+    - tempo control
+    - editor
+    - A*
+    - walls
+    - background effects
+    - only 0-9 kill, do it to everyone around
+  
+  -->
 
   <pre id="preset1" contentEditable="true" class="hidden">
       Q                             9     
@@ -44,30 +74,27 @@ KKKKKKKK                        11111111
                                           </pre>
 
   <pre id="field" contentEditable="true">
-AAAAA                  44444                                
-AAAAA                  44444                                
+A                  9                                        
                                                             
-CCCCC                   99999                               
-CCCCC                   99999                               
+CCCCC                   33333                               
+CCCCC                   33333                               
                                                             
 EEEEE                    4444                               
-EEEEE                    4444                               
+              #                                             
+     WW       #                                             
+     WW       #                                             
+     WW                                                     
+     WW                                         MM        4 
+     WW                                         OO      7   
+     WW                                         QQ       5  
+     WW                                                     
                                                             
-     WW                       99                            
-     WW                       99                            
-     WW                       99                            
-     WW                       99                            
-     WW                       99                            
-     WW                       99                            
-     WW                       99                            
-                                                            
                                                             
 ZZZZ            1111                                        
+ZZZZ            1111                        DD      2       
+ZZZZ            1111                        DD      22      
 ZZZZ            1111                                        
-ZZZZ            1111                                        
-ZZZZ            1111                                        
-ZZZ             111                                         
-                                          </pre>
+ZZZ             111                                         </pre>
 
   <script>
     var context = new window.webkitAudioContext()
@@ -187,8 +214,6 @@ ZZZ             111
 
     // manipulate playfield
     var step_field = function(field, generators, time) {
-      deactivate(time)
-      
       for(var y=0, l=field.length; y < l; y++) { // ugh yuck yuck
         for(var x=0, k=field[y].length; x < k; x++) {
           copy[y][x] = field[y][x]
@@ -199,32 +224,92 @@ ZZZ             111
       for(var y=0, l=field.length; y < l; y++) {
         for(var x=0, k=field[y].length; x < k; x++) {
           var old_c = field[y][x]
-            , is_alpha = /[a-z]/.test(old_c)
           
-          if(/[a-z&'()*+,\-.\/]/.test(old_c)) {
-            // where do i want to go?
-            // TODO: A* algo goes here
+          if(!/[a-z&'()*+,\-.\/]/.test(old_c))
+            continue
             
-            // var new_y = bound(Math.round(y-1+(Math.random()*2)), field.length)
-            //   , new_x = bound(Math.round(x-1+(Math.random()*2)), field[y].length)
-            var new_y = y
-              , new_x = is_alpha
-                        ? bound(x+1, field[y].length)
-                        : bound(x-1, field[y].length)
-              , new_c = field[new_y][new_x]
-            
-            // collision?
-            if(collide(time, old_c, new_c)) {
-              copy[y][x] = ' '
-              copy[new_y][new_x] = ' '
+          var is_alpha = /[a-z]/.test(old_c)
+            , other = !is_alpha ? /[a-z]/ : /[&'()*+,\-.\/]/
+            , done = false
+
+          // anything immediate?
+          close_encounters:
+          for(var ydel=-1; ydel <= 1; ydel++) {
+            for(var xdel=-1; xdel <= 1; xdel++) {
+              if(y + ydel != bound(y + ydel, field.length) || x + xdel != bound(x + xdel, field[y].length))
+                continue
+              var new_c = field[y + ydel][x + xdel]
+              if(other.test(new_c)) {
+                done = true
+                if(is_alpha) // stand still 
+                  break close_encounters
+                  
+                collide(time, old_c, new_c) // or chomp everything around you
+                copy[y][x] = ' '
+                copy[y + ydel][x + xdel] = ' '
+              }
             }
-            // can i move there?
-            else if(new_c == ' ') {
-              copy[y][x] = ' '
-              copy[new_y][new_x] = old_c
-            }
-            
           }
+          
+          if(done)
+            continue
+
+          // look around you
+          var distance = 1
+          do_movement:
+          while(distance++ < 15) {
+            var row_min = Math.max(y - distance, 0)
+              , row_max = Math.min(y + distance, field.length-1)
+              , col_min = Math.max(x - distance, 0)
+              , col_max = Math.min(x + distance, field[y].length-1)
+              
+            for(var i = col_min; i <= col_max; i++) { // top
+              if(other.test(field[row_min][i]))
+                if(trytrymove(y, x, row_min-y, i-x))
+                  break do_movement
+            }
+            
+            for(var i = row_min; i <= row_max; i++) { // sides
+              if(other.test(field[i][col_min])) {
+                if(trytrymove(y, x, i-y, col_min-x))
+                  break do_movement
+              }
+              if(other.test(field[i][col_max])) {
+                if(trytrymove(y, x, i-y, col_max-x))
+                  break do_movement
+              }
+            }
+            
+            for(var i = col_min; i <= col_max; i++) { // bottom
+              if(other.test(field[row_max][i])) {
+                if(trytrymove(y, x, row_max-y, i-x))
+                  break do_movement
+              }
+            }
+          }
+          
+          // where do i want to go?
+          // TODO: A* algo goes here
+          
+          // var new_y = bound(Math.round(y-1+(Math.random()*2)), field.length)
+          //   , new_x = bound(Math.round(x-1+(Math.random()*2)), field[y].length)
+          
+          // var new_y = y
+          //   , new_x = is_alpha
+          //             ? bound(x+1, field[y].length)
+          //             : bound(x-1, field[y].length)
+          //   , new_c = field[new_y][new_x]
+          // 
+          // // collision?
+          // if(collide(time, old_c, new_c)) {
+          //   copy[y][x] = ' '
+          //   copy[new_y][new_x] = ' '
+          // }
+          // // can i move there?
+          // else if(new_c == ' ') {
+          //   copy[y][x] = ' '
+          //   copy[new_y][new_x] = old_c
+          // }
           
         }
       }
@@ -258,6 +343,58 @@ ZZZ             111
       return copy
     }
     
+    var trytrymove = function(y, x, ydel, xdel) {  
+      var yoffset = Math.abs(ydel) >= Math.abs(xdel) ? ydel / Math.abs(ydel) : 0
+        , xoffset = Math.abs(xdel) >  Math.abs(ydel) ? xdel / Math.abs(xdel) : 0
+      
+      // can i move there?
+      if(trymove(y, x, yoffset, xoffset))
+        return true
+    
+      // or here?
+      if(trymove(y, x, yoffset ? yoffset : yoffset - 1, xoffset ? xoffset : xoffset - 1))
+        return true
+
+      // or over there?
+      if(trymove(y, x, yoffset ? yoffset : yoffset + 1, xoffset ? xoffset : xoffset + 1))
+        return true
+    }
+
+    var trymove = function(y, x, yoffset, xoffset) {
+      var new_y = Math.max(y + yoffset, 0)
+        , new_x = Math.max(x + xoffset, 0)
+        
+      if(field[new_y][new_x] == ' ') {
+        copy[y][x] = ' '
+        copy[new_y][new_x] = field[y][x]
+        return true
+      }
+    }
+
+    var is_other = function(x, y, other) {
+      var other = is_alpha ? 
+                  /[&'()*+,\-.\/]/ : 
+                  /[a-z]/
+                  
+      if(other.test(field[y][x])) {
+        return true
+        if(is_alpha) { // do nothing
+        } else {
+          
+        }
+      }
+      if(collide(time, old_c, new_c)) {
+        copy[y][x] = ' '
+        copy[new_y][new_x] = ' '
+      }
+      // can i move there?
+      else if(new_c == ' ') {
+        copy[y][x] = ' '
+        copy[new_y][new_x] = old_c
+      }
+      
+    }
+    
     var collide = function(time, old_c, new_c) {
       if(  (/[a-z]/.test(old_c) && /[&'()*+,\-.\/]/.test(new_c))
         || (/[a-z]/.test(new_c) && /[&'()*+,\-.\/]/.test(old_c)) ) {
@@ -288,56 +425,21 @@ ZZZ             111
     }
     
     
-    // ACTIVATE!
-    var active = {}
-    
     var activate = function(time, num, alpha) {
-      // var filter = filters[num]
-      //   , gain = filter.notes[alpha]
-        
       var gain = gains[alpha]
-        , byetime = time + (num * 1)
-        
-      // gain.gain.value = 1
-      if(!active[byetime]) 
-        active[byetime] = []
-      active[byetime].push({num: num, alpha: alpha, gain: gain})
-      
-      var now = context.currentTime;
-      gain.gain.cancelScheduledValues(now);
-      gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(1, now + 0.05);
-      gain.gain.linearRampToValueAtTime(0, now + 0.05 + (0.05 * num) );
+        , duration = Math.pow(2, num+2) / 1000
 
-      // gain.gain.exponentialRampToValueAtTime(1.0, now + 0.01);
-      // gain.gain.exponentialRampToValueAtTime(0, now + 0.05);
-      
-    }
-    
-    var deactivate = function(time) {
-      if(active[time]) {
-        while(active[time].length) {
-          var act = active[time].pop()
-          // act.gain.gain.value = 0
-        }
-        delete active[time]
-      }
-    }
-    
-    var deactivate_all = function() {
-      for(var key in active) {
-        if(active.hasOwnProperty(key)) {
-          deactivate(key)
-        }
-      }
+      var now = context.currentTime
+      gain.gain.cancelScheduledValues(now)
+      gain.gain.setValueAtTime(0, now)
+      gain.gain.linearRampToValueAtTime(1, now + duration / 2)
+      gain.gain.linearRampToValueAtTime(0, now + duration)
     }
     
     var run = function(duration) {
       run_once()
       if(--duration)
-        setTimeout(function() {run(duration)}, 10)
-      else
-        deactivate_all()
+        setTimeout(function() {run(duration)}, 1000/tempo)
     }
     
     var run_once = function() {
@@ -349,7 +451,6 @@ ZZZ             111
       show_field(field)
     }
     
-
     
     var field_text = document.getElementById('field').innerText
       // , result = import_field(field_text)
