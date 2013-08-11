@@ -1,0 +1,382 @@
+<html>
+<body>
+  <canvas id="canvas" width="1100"></canvas>
+
+  <pre id="foo" contentEditable=true>
+      Q                                   
+              S           T         9     
+                                          
+   5                                      
+   5                      4               
+   3             XX                       
+   3        8                             
+                                          
+                                          
+            2                             
+                          GG      #       
+                                  #       
+AA              MM    7           #       
+AA                                #     11
+                                        11</pre>
+
+  <pre id="field" contentEditable=true>
+AAAAAAA           11111111                
+CCCCCCC                   11111111        
+EEEEEEE                           11111111
+                                          
+                                          
+                                          
+                                          
+                                          
+                                          
+                                          
+                                          
+KKKKKKKK                        11111111  
+KKKKKKKK                        11111111  
+KKKKKKKK                        11111111  
+                                          
+                                          </pre>
+
+  <script>
+    var context = new window.webkitAudioContext()
+      , analyser = context.createAnalyser()
+      , maingain = context.createGainNode()
+
+    maingain.connect(analyser)
+
+    analyser.smoothingTimeConstant = 0.1
+    analyser.fftSize = 1024
+
+    javascriptNode = context.createJavaScriptNode(2048, 1, 1)
+    javascriptNode.connect(context.destination)  // why doesn't this play the sound?
+    
+    analyser.connect(javascriptNode)
+    analyser.connect(context.destination)
+
+
+    // build our symphony of destruction
+    oscs = []
+    gains = []
+    filters = {}
+    freqs = [ 480,   540,   600,  640,   720,   800,   900
+            , 960,   1080,  1200, 1280,  1440,  1600,  1800
+            , 1920,  2160,  2400, 2560,  2880,  3200,  3600
+            , 3840,  4320,  4800, 5120,  5760,  6400,  7200 ]
+    
+    field = []
+    copy = []
+    
+    for(var i=0; i < 27; i++) { // osc
+      var gain = context.createGain()
+      gain.connect(maingain)
+      gain.gain.value = 0
+      
+      var osc = context.createOscillator()
+      osc.frequency.value = freqs[i]
+      osc.start(1)
+      osc.connect(gain)
+      
+      // filters[j].notes.push(gain)
+      gains.push(gain)
+      oscs.push(osc)
+    }
+
+//    for(var j=9; j--;) { // filter
+//      var filter = gain = context.createGain()
+//      filter.connect(maingain)
+//      filter.gain.value = (j+1) / 10
+//      filters[j] = {filter: filter, notes: []}
+//      
+//      for(var i=26; i--;) { // osc
+//        var gain = context.createGain()
+//        gain.connect(filter)
+//        gain.gain.value = 0
+//        
+//        var osc = context.createOscillator()
+//        osc.frequency.value = freqs[i]
+//        osc.start(1)
+//        osc.connect(gain)
+//        
+//        filters[j].notes.push(gain)
+//        gains.push(gain)
+//        oscs.push(osc)
+//      }
+//    }
+
+    // read playfield      
+    var import_field = function(field_string) {
+      var generators = []
+      field = field_string.split("\n").map(function(line) {return line.split('') })
+      
+      // look for generators
+      copy = JSON.parse(JSON.stringify(field))
+      for(var i=0, l=copy.length; i < l; i++) {
+        for(var j=0, k=copy[i].length; j < k; j++) {
+          if(copy[i][j] != ' ') {
+            // how big is it?
+            var c = copy[i][j]
+              , row = i
+              , col = j+1
+              , count = 1
+              , width = 1
+              
+            copy[i][j] = ' '
+            while(row < copy.length && col < copy[0].length) {
+              if(c != copy[row][col]) {
+                if(col == j) {
+                  generators.push({count: count, note: c, row: i, col: j, width: width})
+                  count = 0
+                  break
+                }
+                width = width > 1 ? width : col - j
+                row++
+                col = j
+                continue
+              }
+              
+              copy[row][col] = ' '
+              if(++col == copy[0].length) {
+                width = width > 1 ? width : col - j
+                row++
+                col = j
+              }
+              count++
+            }
+            if(count) {
+              generators.push({count: count, note: c, row: i, col: j, width: width})
+            }
+          }
+        }
+      }
+      
+      return [field, generators]
+    }
+
+    // manipulate playfield
+    var step_field = function(field, generators, time) {
+      deactivate(time)
+      
+      // prep our copy
+      // var copy = []
+      // for(var y=0, l=field.length; y < l; y++) {
+      //   if(!copy[y])
+      //     copy[y] = []
+      //   for(var x=0, k=field[y].length; x < k; x++) {
+      //     if(!/[a-z&'()*+,\-.\/]/.test(field[y][x]))
+      //       copy[y][x] = field[y][x]
+      //     else
+      //       copy[y][x] = ' '
+      //   }
+      // }
+      
+      // var copy = JSON.parse(JSON.stringify(field))
+      
+      // move things
+      for(var y=0, l=field.length; y < l; y++) {
+        for(var x=0, k=field[y].length; x < k; x++) {
+          var old_c = field[y][x]
+            , is_alpha = /[a-z]/.test(old_c)
+            
+          if(/[a-z&'()*+,\-.\/]/.test(old_c)) {
+            // where do i want to go?
+            // TODO: A* algo goes here
+            
+            // var new_y = bound(Math.round(y-1+(Math.random()*2)), field.length)
+            //   , new_x = bound(Math.round(x-1+(Math.random()*2)), field[y].length)
+            var new_y = y
+              , new_x = is_alpha
+                        ? bound(x+1, field[y].length)
+                        : bound(x-1, field[y].length)
+              , new_c = field[new_y][new_x]
+            
+            // collision?
+            if(  (/[a-z]/.test(old_c) && /[&'()*+,\-.\/]/.test(new_c))
+              || (/[a-z]/.test(new_c) && /[&'()*+,\-.\/]/.test(old_c)) ) {
+              // console.log('Oh! ' + copy[y][x] + ' ran smack into ' + copy[new_y][new_x] + '!! Ouch!')
+              copy[y][x] = ' '
+              copy[new_y][new_x] = ' '
+              field[y][x] = ' ' // yuck
+              field[new_y][new_x] = ' ' // yuck
+              
+              var num   = Math.min(old_c.charCodeAt(0), new_c.charCodeAt(0)) - 37
+                , alpha = Math.max(old_c.charCodeAt(0), new_c.charCodeAt(0)) - 97
+              
+              activate(time, num, alpha)
+            }
+
+            // can i move there?
+            else if(new_c == ' ') {
+              copy[y][x] = ' '
+              copy[new_y][new_x] = old_c
+            }
+            
+          }
+          else {
+            copy[y][x] = field[y][x]
+          }
+          
+        }
+      }
+      
+      // spawn things
+      for(var i=0, l=generators.length; i < l; i++) {
+        var gen = generators[i]
+          , is_alpha = /[A-Z]/.test(gen.note)
+          , spawn_col = bound(is_alpha ? gen.col + gen.width : gen.col - 1, field[gen.row].length)
+          
+        if(!(time % (gen.count*5 + 1))) {
+          // copy[gen.row - 1 < 0 ? copy.length-1 : gen.row - 1][gen.col] = // TODO: look before we smash
+          copy[gen.row][spawn_col] = // TODO: look before we smash
+            gen.note.charCodeAt(0) > 57 
+            ? gen.note.toLowerCase() 
+            : String.fromCharCode(gen.note.charCodeAt(0) - 10)
+        }
+      }
+      
+      return copy
+    }
+    
+    var show_field = function(field) {
+      var flatfield = field.map(function(line){ return line.join('') }).join("\n")
+      document.getElementById('field').innerText = flatfield
+    }
+
+    var bound = function(num, limit) {
+      if(num < 0)
+        return limit-1
+      if(num >= limit)
+        return 0
+      return num
+    }
+    
+    
+    // ACTIVATE!
+    var active = {}
+    
+    var activate = function(time, num, alpha) {
+      // var filter = filters[num]
+      //   , gain = filter.notes[alpha]
+        
+      var gain = gains[alpha]
+        , byetime = time + (num * 10)
+        
+      gain.gain.value = 1
+      if(!active[byetime]) 
+        active[byetime] = []
+      active[byetime].push({num: num, alpha: alpha, gain: gain})
+    }
+    
+    var deactivate = function(time) {
+      if(active[time]) {
+        while(active[time].length) {
+          var act = active[time].pop()
+          act.gain.gain.value = 0
+        }
+        delete active[time]
+      }
+    }
+    
+    var deactivate_all = function() {
+      for(var key in active) {
+        if(active.hasOwnProperty(key)) {
+          deactivate(key)
+        }
+      }
+    }
+    
+    var run = function(duration) {
+      run_once()
+      if(--duration)
+        setTimeout(function() {run(duration)}, 0)
+      else
+        deactivate_all()
+    }
+    
+    var run_once = function() {
+      field = step_field(field, generators, time++)
+      show_field(field)
+    }
+    
+
+    
+    var field_text = document.getElementById('field').innerText
+      , result = import_field(field_text)
+      , field = result[0]
+      , generators = result[1]
+      , time = 1
+
+    var foo = function(n) {setTimeout(function() {show_field(field = step_field(field, generators, time++)); if(n>0) foo(n-1) }, 0)}
+
+
+    // viz stuff... yurmx
+    // (mostly stolen from www.smartjava.org/examples/webaudio/)
+    ctx = document.getElementById('canvas').getContext("2d"); // FIXME: global yuck yuck
+    var gradient = ctx.createLinearGradient(0,0,0,50);
+    gradient.addColorStop(1,'#00ff00');
+    gradient.addColorStop(0,'#ffff00');
+    javascriptNode.onaudioprocess = function() {
+      // get the average for the first channel
+      var array =  new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(array);
+      
+      // clear the current state
+      ctx.clearRect(0, 0, 1100, 50);
+      
+      // set the fill style
+      ctx.fillStyle=gradient;
+      drawSpectrum(array);
+    }
+
+    function drawSpectrum(array) {
+      for ( var i = 0; i < (array.length); i++ ){
+        var value = array[i]
+        ctx.fillRect(i*2, 55-(value/5), 1, 50)
+      }
+    }
+    
+    ~function() {
+      var timeouts = [];
+      var messageName = 12345;
+
+      // Like setTimeout, but only takes a function argument.  There's
+      // no time argument (always zero) and no arguments (you have to
+      // use a closure).
+      function setImmediate(fn) {
+        timeouts.push(fn);
+        window.postMessage(messageName, "*");
+      }
+
+      function handleMessage(event) {
+        if(event.data == messageName) {
+          event.stopPropagation();
+          if(timeouts.length > 0) {
+            timeouts.shift()()
+          }
+        }
+      }
+
+      window.addEventListener("message", handleMessage, true);
+
+      // Add the one thing we want added to the window object.
+      window.setImmediate = setImmediate;
+    }();
+    
+    /*
+      using setImmediate:
+        osc = context.createOscillator()
+        osc.frequency.value = 444
+        osc.connect(maingain)
+        osc.noteOn(1)
+        x = true
+        flip = 1
+        foo = function() {setImmediate(function() {var o = osc.frequency.value += flip; if(o > 10000 || !o) flip *= -1; if(x) foo()}, 0)}
+        foo()
+        
+      
+      foo = function(n) {setTimeout(function() {show_field(field = step_field(field, generators, time++)); if(n>0) foo(n-1) }, 0)}
+      
+    */
+    
+  </script>
+</body>
+</html>
