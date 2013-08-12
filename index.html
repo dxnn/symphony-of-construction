@@ -6,11 +6,16 @@
     </style>
   </head>
 <body>
-  <canvas id="canvas" width="1100"></canvas>
-  
+  <canvas id="canvas" width="1100" height="50"></canvas>
+  <p></p>
   <label for="tempo">Tempo</label><input type="range" name="tempo" value="50" min="10" max="250" id="tempo">
   <input type="button" name="start" value="start" id="start">
   <input type="button" name="stop" value="stop" id="stop">
+  
+  <input type="button" name="preset1-button" value="Preset 1" class="preset" id="preset1-button">
+  <input type="button" name="preset2-button" value="Preset 2" class="preset" id="preset2-button">
+  <input type="button" name="preset3-button" value="Preset 3" class="preset" id="preset3-button">
+  
   
   <!-- 
     Talk about: 
@@ -23,12 +28,12 @@
     - allow saving boards
     
     Do:
-    - tempo control
-    - editor
+    -. tempo control
+    -. editor
+    -. walls
+    -. only 0-9 kill, do it to everyone around
     - A*
-    - walls
     - background effects
-    - only 0-9 kill, do it to everyone around
   
   -->
 
@@ -67,7 +72,7 @@ KKKKKKKK                        11111111
                                           
                                           </pre>
 
-  <pre id="field" contentEditable="true">
+  <pre id="preset3" contentEditable="true" class="hidden">
 A                  9                                        
                                                             
 CCCCC                   33333                               
@@ -90,22 +95,37 @@ ZZZZ            1111                        DD      22
 ZZZZ            1111                                        
 ZZZ             111                                         </pre>
 
+
+  <pre id="field" contentEditable="true">
+                                                          
+                                                          
+                                                          
+                                                          
+                                                          
+                                                          
+                                                          
+                                                          
+                                                          
+                                                          
+                                                          
+                                                          </pre>
+
   <script>
     var context = new window.webkitAudioContext()
       , analyser = context.createAnalyser()
       , maingain = context.createGainNode()
 
-    maingain.connect(context.destination)
-    // maingain.connect(analyser)
+    maingain.connect(analyser)
 
     analyser.smoothingTimeConstant = 0.1
     analyser.fftSize = 1024
 
     javascriptNode = context.createJavaScriptNode(2048, 1, 1)
-    // javascriptNode.connect(context.destination)  // why doesn't this play the sound?
+    javascriptNode.connect(context.destination)  // why doesn't this play the sound?
     
-    // analyser.connect(javascriptNode)
-    // analyser.connect(context.destination)
+    analyser.connect(javascriptNode)
+    analyser.connect(context.destination)
+    // maingain.connect(context.destination)
 
 
     // build our symphony of destruction
@@ -546,6 +566,20 @@ ZZZ             111                                         </pre>
     }
     document.getElementById('stop').onclick = function(e) {
       started = false
+    }
+    
+    // document.getElementsByClassName('preset').onclick = function(e) {
+    document.getElementById('preset1-button').onclick = function(e) {
+      started = false
+      document.getElementById('field').textContent = document.getElementById('preset1').textContent
+    }
+    document.getElementById('preset2-button').onclick = function(e) {
+      started = false
+      document.getElementById('field').textContent = document.getElementById('preset2').textContent
+    }
+    document.getElementById('preset3-button').onclick = function(e) {
+      started = false
+      document.getElementById('field').textContent = document.getElementById('preset3').textContent
     }
 
     // var blargh = function(e) {
