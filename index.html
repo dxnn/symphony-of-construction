@@ -1,21 +1,12 @@
 <html>
-  <head>
-    <title>Symphony of Construction</title>
-    <style>
-      .hidden {display: none}
-    </style>
-  </head>
+<head>
+  <title>Symphony of Construction</title>
+  <style>
+    .hidden {display: none}
+  </style>
+</head>
 <body>
   <canvas id="canvas" width="1100" height="50"></canvas>
-  <p></p>
-  <label for="tempo">Tempo</label><input type="range" name="tempo" value="50" min="10" max="250" id="tempo">
-  <input type="button" name="start" value="start" id="start">
-  <input type="button" name="stop" value="stop" id="stop">
-  
-  <input type="button" name="preset1-button" value="Preset 1" class="preset" id="preset1-button">
-  <input type="button" name="preset2-button" value="Preset 2" class="preset" id="preset2-button">
-  <input type="button" name="preset3-button" value="Preset 3" class="preset" id="preset3-button">
-  
   
   <!-- 
     Talk about: 
@@ -35,9 +26,12 @@
     - A*
     - background effects
   
+    Notes:
+    This was written in around four hours for a Music Hack Day event. The code is pretty ugly due to some midstream goal changes and make-it-work defactoring.
+  
   -->
 
-  <pre id="preset1" contentEditable="true" class="hidden">
+  <pre id="preset1" class="hidden">
       Q                             9     
               S                    2     
                                           
@@ -54,7 +48,7 @@ AA              MM    7           9
 AA                                9     11
                                         11</pre>
 
-  <pre id="preset2" contentEditable="true" class="hidden">
+  <pre id="preset2" class="hidden">
 AAAAAAA           33333333                
 CCCCCCC                   33333333        
 EEEEEEE                           33333333
@@ -72,7 +66,7 @@ KKKKKKKK                        11111111
                                           
                                           </pre>
 
-  <pre id="preset3" contentEditable="true" class="hidden">
+  <pre id="preset3" class="hidden">
 A                  9                                        
                                                             
 CCCCC                   33333                               
@@ -110,12 +104,28 @@ ZZZ             111                                         </pre>
                                                           
                                                           </pre>
 
+  <p></p>
+  <input type="button" name="start" value="start" id="start">
+  <input type="button" name="stop" value="stop" id="stop">
+  <label for="tempo">Tempo</label><input type="range" name="tempo" value="50" min="10" max="250" id="tempo">
+  <label for="volume">Volume</label><input type="range" name="volume" value="0.5" min="0" max="1" step="0.01" id="volume">
+  <p></p>
+  <input type="button" name="preset1-button" value="Preset 1" class="preset" id="preset1-button">
+  <input type="button" name="preset2-button" value="Preset 2" class="preset" id="preset2-button">
+  <input type="button" name="preset3-button" value="Preset 3" class="preset" id="preset3-button">
+  
+
+
+
+
   <script>
+    // set up the audio nodes
     var context = new window.webkitAudioContext()
       , analyser = context.createAnalyser()
       , maingain = context.createGainNode()
 
     maingain.connect(analyser)
+    maingain.gain.value = 0.5
 
     analyser.smoothingTimeConstant = 0.1
     analyser.fftSize = 1024
@@ -179,11 +189,16 @@ ZZZ             111                                         </pre>
     // read playfield      
     var import_field = function(field_string) {
       generators = []
-      field = field_string.split("\n").map(function(line) {
-        line = line.slice(0, field_length) 
-        line = line + Array(field_length - line.length + 1).join(' ')
-        return line.split('') 
-      })
+      field = 
+        field_string
+          .replace(/[a-z&'()*+,\-.\/]/g, ' ')
+          .replace(/[^ A-Z0-9\n]/g, '')
+          .split("\n")
+          .map(function(line) {
+            line = line.slice(0, field_length) 
+            line = line + Array(field_length - line.length + 1).join(' ')
+            return line.split('') 
+          })
       
       // look for generators
       copy = JSON.parse(JSON.stringify(field))
@@ -230,12 +245,17 @@ ZZZ             111                                         </pre>
       
       return [field, generators]
     }
+    
+    
+    
+    
 
     // manipulate playfield
     var step_field = function(field, generators, time) {
       for(var y=0, l=field.length; y < l; y++) { // ugh yuck yuck
         for(var x=0, k=field[y].length; x < k; x++) {
           copy[y][x] = field[y][x]
+          // copy[y][x] = ' '
         }
       }
       
@@ -244,6 +264,13 @@ ZZZ             111                                         </pre>
         for(var x=0, k=field[y].length; x < k; x++) {
           var old_c = field[y][x]
           
+          // copy[y][x] = ' '
+          
+          if(/[A-Z0-9]/.test(old_c)) {
+            copy[y][x] = old_c
+            continue
+          }
+            
           if(!/[a-z&'()*+,\-.\/]/.test(old_c))
             continue
             
@@ -257,7 +284,9 @@ ZZZ             111                                         </pre>
             for(var xdel=-1; xdel <= 1; xdel++) {
               if(y + ydel != bound(y + ydel, field.length) || x + xdel != bound(x + xdel, field[y].length))
                 continue
+
               var new_c = field[y + ydel][x + xdel]
+
               if(other.test(new_c)) {
                 done = true
                 if(is_alpha) // stand still 
@@ -383,36 +412,42 @@ ZZZ             111                                         </pre>
       var new_y = Math.max(y + yoffset, 0)
         , new_x = Math.max(x + xoffset, 0)
         
-      if(field[new_y][new_x] == ' ') {
+      if(field[new_y][new_x] == ' ' && copy[new_y][new_x] == ' ') {
         copy[y][x] = ' '
         copy[new_y][new_x] = field[y][x]
         return true
       }
+      else if(copy[new_y][new_x] != ' ') {
+        // console.log('collision!', copy[y][x], field[y][x], copy[new_y][new_x], field[new_y][new_x])
+      }
+      else {
+        // console.log('wat', copy[y][x], field[y][x], copy[new_y][new_x], field[new_y][new_x])
+      }
     }
 
-    var is_other = function(x, y, other) {
-      var other = is_alpha ? 
-                  /[&'()*+,\-.\/]/ : 
-                  /[a-z]/
-                  
-      if(other.test(field[y][x])) {
-        return true
-        if(is_alpha) { // do nothing
-        } else {
-          
-        }
-      }
-      if(collide(time, old_c, new_c)) {
-        copy[y][x] = ' '
-        copy[new_y][new_x] = ' '
-      }
-      // can i move there?
-      else if(new_c == ' ') {
-        copy[y][x] = ' '
-        copy[new_y][new_x] = old_c
-      }
-      
-    }
+//    var is_other = function(x, y, other) {
+//      var other = is_alpha ? 
+//                  /[&'()*+,\-.\/]/ : 
+//                  /[a-z]/
+//                  
+//      if(other.test(field[y][x])) {
+//        return true
+//        if(is_alpha) { // do nothing
+//        } else {
+//          
+//        }
+//      }
+//      if(collide(time, old_c, new_c)) {
+//        copy[y][x] = ' '
+//        copy[new_y][new_x] = ' '
+//      }
+//      // can i move there?
+//      else if(new_c == ' ') {
+//        copy[y][x] = ' '
+//        copy[new_y][new_x] = old_c
+//      }
+//      
+//    }
     
     var collide = function(time, old_c, new_c) {
       if(  (/[a-z]/.test(old_c) && /[&'()*+,\-.\/]/.test(new_c))
@@ -475,8 +510,8 @@ ZZZ             111                                         </pre>
       // , result = import_field(field_text)
       // , field = result[0]
       // , generators = result[1]
-      , time = 1
-      , temp = []
+    var time = 1
+    var temp = []
 
     import_field(field_text)
 
@@ -509,53 +544,91 @@ ZZZ             111                                         </pre>
       }
     }
     
-    ~function() {
-      var timeouts = [];
-      var messageName = 12345;
-
-      // Like setTimeout, but only takes a function argument.  There's
-      // no time argument (always zero) and no arguments (you have to
-      // use a closure).
-      function setImmediate(fn) {
-        timeouts.push(fn);
-        window.postMessage(messageName, "*");
-      }
-
-      function handleMessage(event) {
-        if(event.data == messageName) {
-          event.stopPropagation();
-          if(timeouts.length > 0) {
-            timeouts.shift()()
-          }
-        }
-      }
-
-      window.addEventListener("message", handleMessage, true);
-
-      // Add the one thing we want added to the window object.
-      window.setImmediate = setImmediate;
-    }();
     
-    /*
-      using setImmediate:
-        osc = context.createOscillator()
-        osc.frequency.value = 444
-        osc.connect(maingain)
-        osc.noteOn(1)
-        x = true
-        flip = 1
-        foo = function() {setImmediate(function() {var o = osc.frequency.value += flip; if(o > 10000 || !o) flip *= -1; if(x) foo()}, 0)}
-        foo()
+    
+    //// field management
         
+    function field_to_url_string(field, line_length) {
+      return 0,
+        field
+          .replace(/(.{1,80}).*/g,                             // coerce line lengths
+            function(m, p1)             
+              {return p1 + 
+                Array(line_length - p1.length)
+                  .join(' ')})
+          .replace(/[^A-Z0-9]/g, ' ')                          // only keep generators
+          .replace(/ /g, '_')                                  // spaces aren't uriable
+          .replace(/_(_+)_/g,                                  // compress long spaces
+            function(match, inner) 
+              {return '-' + inner.length + '_'})
+    }
+    
+    function url_string_to_field(string, line_length) {
+      return 0,
+        string
+          .replace(/-(\d+)_/g,                                 // decompress spaces
+            function(match, inner) 
+              {return Array(+inner+ 3).join('_')})
+          .replace(/_/g, ' ')
+          .replace(RegExp('.{' + line_length + '}', 'g'), "$&\n")
+    }
+    
+    function on_field_change(field) {
+      set_url(field_to_url_string(field))
+      import_field(field)
+    }
+    
+    function set_url(url_string, tempo) {
+      var state = { tempo: tempo, url_string: url_string }
+      history.pushState(state, '', '?tempo=' + tempo + '&field=' + url_string)
+    }
+    
+    function get_uri_params() {
+      return 0,
+        window.location.search
+          .substring(1)
+          .split('&')
+          .reduce(function(acc, item) {
+            return item ? add_value.apply(null, item.split('=').concat([acc])) : acc
+          }, {})
+    }
+    
+    function add_value(key, value, acc) {
+      acc[key] = value
+      return acc
+    }
+    
+    function set_field(field) {
+      document.getElementById('field').textContent = field
+      // THINK: we want a place for live pieces that lives UNDER the generator field, so we can live edit
+      // THINK: we we're stopped we should import the live pieces into the generator field so we can edit those also,
+      //        then when we start playing again they go back to the underlayer.
+    }
+    
+    function on_load() {
+      var field = url_string_to_field(get_url_string())
+      set_field(field)
+      import_field(field)
       
-      foo = function(n) {setTimeout(function() {show_field(field = step_field(field, generators, time++)); if(n>0) foo(n-1) }, 0)}
+      // set_tempo
       
-    */
+      play()
+    }
+    
+    
+    
+    //// end field management
+    
+    
+    
+    
     
 
     tempo = 50
+    volume = 0.5
     started = false
     document.getElementById('tempo').onchange = function(e) {tempo = +e.target.value}
+    document.getElementById('volume').onchange = function(e) {volume = +e.target.value; maingain.gain.value = volume}
     document.getElementById('start').onclick = function(e) {
       if(!started) {
         started = true
