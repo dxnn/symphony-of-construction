@@ -1,8 +1,13 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Symphony of Construction</title>
   <style>
-    .hidden {display: none}
+    #plause {
+      font-size: x-large;
+    }
   </style>
 </head>
 <body>
@@ -31,20 +36,18 @@
 
   -->
 
+  <button id="plause">▶⏸</button>
+  <label for="tempo">Tempo</label><input type="range" name="tempo" value="50" min="10" max="250" id="tempo">
+  <label for="volume">Volume</label><input type="range" name="volume" value="0.5" min="0" max="1" step="0.01" id="volume">
+  
   <canvas id="canvas" width="1100" height="50"></canvas>
 
   <pre id="field" contentEditable="true"></pre>
 
   <p></p>
-  <input type="button" name="start" value="start" id="start">
-  <input type="button" name="stop" value="stop" id="stop">
-  <label for="tempo">Tempo</label><input type="range" name="tempo" value="50" min="10" max="250" id="tempo">
-  <label for="volume">Volume</label><input type="range" name="volume" value="0.5" min="0" max="1" step="0.01" id="volume">
-  <p></p>
   <input type="button" name="preset1-button" value="Preset 1" class="preset" id="preset1-button">
   <input type="button" name="preset2-button" value="Preset 2" class="preset" id="preset2-button">
   <input type="button" name="preset3-button" value="Preset 3" class="preset" id="preset3-button">
-
 
   <script>
     // some helper items
@@ -57,7 +60,8 @@
     var generators = []
     var field_length = 80
     var time = 0
-
+    
+    let g_pause = true
 
     // set up the audio nodes
     var context = new (window.AudioContext || window.webkitAudioContext)
@@ -179,9 +183,6 @@
 
       return [field, generators]
     }
-
-
-
 
 
     // manipulate playfield
@@ -421,9 +422,9 @@
     }
 
     var run = function() {
-      run_once()
-      if(time)
-        timeout = setTimeout(function() {run()}, 1000/tempo + (0*time++))
+      if(!g_pause)
+        run_once()
+      timeout = setTimeout(run, 1000 / tempo)
     }
 
     var run_once = function() {
@@ -433,7 +434,6 @@
       copy = temp
       draw_field(field)
     }
-
 
 
     // viz stuff... yurmx
@@ -461,7 +461,6 @@
         ctx.fillRect(i*2, 55-(value/5), 1, 50)
       }
     }
-
 
 
     //// field management
@@ -529,7 +528,7 @@
       set_url(url_string, tempo)
       draw_field(field)
       import_field(field)
-      run()
+      // run()
     }
 
     function draw_field(field) {
@@ -538,39 +537,38 @@
                            : field.map(function(line) { return line.join('') })
                                   .join("\n") }
 
-    function start() {
-      if(time) return
-      on_field_change(field_el.textContent, field_length)
-        /* set_field(field_el.textContent, field_length) */
-      time = 1
+    // function start() {
+    //   if(g_pause) return
+    //   on_field_change(field_el.textContent, field_length)
+    //     /* set_field(field_el.textContent, field_length) */
+    //   run()
+    // }
+
+    // function stop() {
+    //   g_pause = true
+    // }
+
+    function plause() {
+      g_pause = !g_pause
+    }
+
+    function on_load() {
+      var params = get_uri_params()
+      set_tempo(params.tempo)
+      set_field(params.field || preset1, field_length)
       run()
     }
-
-    function stop() {
-      time = 0
-    }
-
 
     var preset1 = "A-16_9-138_CCCCC-17_33333-49_CCCCC-17_33333-129_EEEEE-18_4444-134_WW-76_WW-76_WW-76_WW-39_MM-6_4-24_WW-39_OO-4_7-26_WW-39_QQ-5_5-25_WW-231_ZZZZ-10_1111-58_ZZZZ-10_1111-22_DD-4_2-25_ZZZZ-10_1111-22_DD-4_22-24_ZZZZ-10_1111-58_ZZZ-11_111-58_"
     var preset2 = "AAAAAAA-9_33333333-52_CCCCCCC-17_33333333-44_EEEEEEE-25_33333333-676_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-197_"
     var preset3 = "-4_Q-27_9-55_S-18_2-125_5-24_TT-49_5-20_4-54_3-11_XX-62_3-6_8-237_2-91_GG-4_9-77_9-43_AA-12_MM-2_7-9_9-43_AA-30_9-3_11-76_11-35_"
 
-
-
-    function on_load() {
-      var params = get_uri_params()
-
-      set_tempo(params.tempo)
-
-      set_field(params.field || preset1, field_length)
-    }
-
-
     // DOM bindings
     document.addEventListener('DOMContentLoaded', function() {
 
-      el('stop').onclick    = function(e) { stop() }
-      el('start').onclick   = function(e) { start() }
+      // el('stop').onclick    = function(e) { stop() }
+      // el('start').onclick   = function(e) { start() }
+      el('plause').onclick   = function(e) { plause() }
       el('tempo').onchange  = function(e) { set_tempo(+e.target.value) }
       el('volume').onchange = function(e) { set_volume(+e.target.value) }
 
