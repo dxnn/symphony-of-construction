@@ -6,7 +6,6 @@
   </style>
 </head>
 <body>
-  <canvas id="canvas" width="1100" height="50"></canvas>
 
   <!--
     Talk about:
@@ -32,6 +31,7 @@
 
   -->
 
+  <canvas id="canvas" width="1100" height="50"></canvas>
 
   <pre id="field" contentEditable="true"></pre>
 
@@ -48,8 +48,8 @@
 
   <script>
     // some helper items
-    var $id = document.getElementById.bind(document)
-    var field_el = $id('field')
+    var el = document.getElementById.bind(document)
+    var field_el = el('field')
 
     var tempo = 50
     var field = []
@@ -121,7 +121,7 @@
 
 
     // read playfield
-    var import_field = function(field_string) {
+    function import_field(field_string) {
       generators = []
       field =
         field_string
@@ -438,7 +438,7 @@
 
     // viz stuff... yurmx
     // (mostly stolen from www.smartjava.org/examples/webaudio/)
-    ctx = $id('canvas').getContext("2d"); // FIXME: global yuck yuck
+    ctx = el('canvas').getContext("2d"); // FIXME: global yuck yuck
     var gradient = ctx.createLinearGradient(0,0,0,50);
     gradient.addColorStop(1,'#00ff00');
     gradient.addColorStop(0,'#ffff00');
@@ -489,8 +489,8 @@
           .replace(/_/g, ' ')
           .replace(RegExp('.{' + line_length + '}', 'g'), "$&\n") }
 
-    function on_field_change(field) {
-      set_url(field_to_url_string(field))
+    function on_field_change(field, line_length) {
+      set_url(field_to_url_string(field, line_length))
       import_field(field)
     }
 
@@ -526,6 +526,7 @@
       var field = url_string_to_field(url_string, field_length)
 
       stop()
+      set_url(url_string, tempo)
       draw_field(field)
       import_field(field)
       run()
@@ -539,6 +540,8 @@
 
     function start() {
       if(time) return
+      on_field_change(field_el.textContent, field_length)
+        /* set_field(field_el.textContent, field_length) */
       time = 1
       run()
     }
@@ -566,18 +569,18 @@
     // DOM bindings
     document.addEventListener('DOMContentLoaded', function() {
 
-      $id('stop').onclick    = function(e) { stop() }
-      $id('start').onclick   = function(e) { start() }
-      $id('tempo').onchange  = function(e) { set_tempo(+e.target.value) }
-      $id('volume').onchange = function(e) { set_volume(+e.target.value) }
+      el('stop').onclick    = function(e) { stop() }
+      el('start').onclick   = function(e) { start() }
+      el('tempo').onchange  = function(e) { set_tempo(+e.target.value) }
+      el('volume').onchange = function(e) { set_volume(+e.target.value) }
 
-      $id('preset1-button').onclick = function(e) {
+      el('preset1-button').onclick = function(e) {
         set_field(preset1, field_length) }
 
-      $id('preset2-button').onclick = function(e) {
+      el('preset2-button').onclick = function(e) {
         set_field(preset2, field_length) }
 
-      $id('preset3-button').onclick = function(e) {
+      el('preset3-button').onclick = function(e) {
         set_field(preset3, field_length) }
 
       on_load()
