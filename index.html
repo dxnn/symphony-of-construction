@@ -64,7 +64,8 @@
     let g_pause = true
 
     // set up the audio nodes
-    var context = new (window.AudioContext || window.webkitAudioContext)
+    var context = new window.AudioContext()
+    // var context = new (window.AudioContext || window.webkitAudioContext)
     var analyser = context.createAnalyser()
     var maingain = context.createGain()
 
@@ -73,6 +74,40 @@
 
     analyser.smoothingTimeConstant = 0.1
     analyser.fftSize = 1024
+
+
+    // // Modern approach: use AudioWorklet instead of ScriptProcessor
+    // var javascriptNode = null;
+    
+    // // Create a simple audio worklet to handle visualization
+    // async function setupAudioWorklet() {
+    //   try {
+    //     if (context.audioWorklet) {
+    //       await context.audioWorklet.addModule('data:text/javascript;charset=utf-8,' + encodeURIComponent(`
+    //         class SpectrumAnalyzer extends AudioWorkletProcessor {
+    //           process(inputs, outputs, parameters) {
+    //             // This is a minimal implementation for visualization
+    //             return true;
+    //           }
+    //         }
+    //         registerProcessor('spectrum-analyzer', SpectrumAnalyzer);
+    //       `));
+          
+    //       // Create audio worklet node for visualization
+    //       javascriptNode = new AudioWorkletNode(context, 'spectrum-analyzer');
+    //       javascriptNode.connect(context.destination);
+    //     } else {
+    //       // Fallback to ScriptProcessor (deprecated but still works)
+    //       javascriptNode = context.createScriptProcessor(2048, 1, 1);
+    //       javascriptNode.connect(context.destination);
+    //     }
+    //   } catch (e) {
+    //     // Fallback to ScriptProcessor if AudioWorklet fails
+    //     javascriptNode = context.createScriptProcessor(2048, 1, 1);
+    //     javascriptNode.connect(context.destination);
+    //   }
+    // }
+
 
     javascriptNode = context.createScriptProcessor(2048, 1, 1)
     javascriptNode.connect(context.destination)  // why doesn't this play the sound?
@@ -98,7 +133,7 @@
 
       var osc = context.createOscillator()
       osc.frequency.value = freqs[i]
-      osc.start(1)
+      osc.start(0)
       osc.connect(gain)
 
       // filters[j].notes.push(gain)
@@ -122,6 +157,13 @@
         output[i] = Math.random() * 2 - 1
       }
     }
+
+    // Audio context needs to be resumed after user interaction
+    document.body.addEventListener('click', function() {
+      if (context.state === 'suspended') {
+        context.resume();
+      }
+    }, { once: true });
 
 
     // read playfield
