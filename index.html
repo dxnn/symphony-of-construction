@@ -1,17 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Symphony of Construction</title>
   <style>
-    #plause {
-      font-size: x-large;
+
+    @font-face {
+      font-family: "ComicMono";
+      src: local("Comic Mono"), local("ComicMono"), url("ComicMono.ttf");
     }
+
+    @font-face {
+      font-family: "ComicMono";
+      src: 
+        local("Comic Mono Bold"),
+        local("ComicMono-Bold"),
+        url("ComicMono-Bold.ttf");
+      font-weight: bold;
+    }
+
+    html, body, pre, button, input {
+      font-family: "ComicMono", monospace;
+    }
+
+    pre {
+      width: 100vw;
+      font-size: clamp(12px, 2.2vw, 40px);
+    }
+    
+    #field {
+      height: 30em;
+    }
+
+    button, input {
+      border: none;
+      background-color: transparent;
+    }
+
   </style>
 </head>
-<body>
 
+<body>
   <!--
     Talk about:
     - 260 osc/gain combos (50% cpu w/ all gains 0) vs 26
@@ -20,150 +51,124 @@
     - setTimeout vs context.currentTime
     - Z is noise / hihat
     - later, allow control over individual sounds / effects
-    - allow saving boards
-
-    Do:
-    -. tempo control
-    -. editor
-    -. walls
-    -. only 0-9 kill, do it to everyone around
-    - A*
-    - background effects
-
-    Notes:
-    This was written in around four hours for a Music Hack Day event.
-    The code is pretty ugly due to some midstream goal changes and make-it-work defactoring.
-
   -->
 
-  <button id="plause">▶⏸</button>
-  <label for="tempo">Tempo</label><input type="range" name="tempo" value="50" min="10" max="250" id="tempo">
-  <label for="volume">Volume</label><input type="range" name="volume" value="0.5" min="0" max="1" step="0.01" id="volume">
-  
-  <canvas id="canvas" width="1100" height="50"></canvas>
+  <pre id="header">
+<strong>Symphony of Construction</strong>
+<em>A browser-based zero-player roguelike cellular automata modular synthesizer</em>
+  </pre>
 
-  <pre id="field" contentEditable="true"></pre>
+  <pre id="field"></pre>
 
   <p></p>
+
+  <button id="plause">▶⏸</button>
+  <label for="tempo">Tempo</label><input type="range" name="tempo" value="10" min="1" max="100" id="tempo">
+  <label for="volume">Volume</label><input type="range" name="volume" value="0.5" min="0" max="1" step="0.01"
+    id="volume">
+
+  <canvas id="canvas" width="1100" height="50"></canvas>
+
   <input type="button" name="preset1-button" value="Preset 1" class="preset" id="preset1-button">
   <input type="button" name="preset2-button" value="Preset 2" class="preset" id="preset2-button">
   <input type="button" name="preset3-button" value="Preset 3" class="preset" id="preset3-button">
 
   <script>
     // some helper items
-    var el = document.getElementById.bind(document)
-    var field_el = el('field')
+    let el = document.getElementById.bind(document)
+    let field_el = el('field')
 
-    var tempo = 50
-    var field = []
-    var copy = []
-    var generators = []
-    var field_length = 80
-    var time = 0
-    
+    let tempo = 10
+    let field = []
+    let copy = []
+    let generators = []
+    let field_length = 80
+    let time = 0
+    let context, analyser, maingain
     let g_pause = true
 
     // set up the audio nodes
-    var context = new window.AudioContext()
-    // var context = new (window.AudioContext || window.webkitAudioContext)
-    var analyser = context.createAnalyser()
-    var maingain = context.createGain()
+    function audio_setup() {
+      context = new window.AudioContext()
+      analyser = context.createAnalyser()
+      maingain = context.createGain()
 
-    maingain.connect(analyser)
-    maingain.gain.value = 0.5
+      maingain.connect(analyser)
+      maingain.gain.value = 0.5
 
-    analyser.smoothingTimeConstant = 0.1
-    analyser.fftSize = 1024
+      analyser.smoothingTimeConstant = 0.1
+      analyser.fftSize = 1024
 
+      javascriptNode = context.createScriptProcessor(2048, 1, 1)
+      javascriptNode.connect(context.destination)  // why doesn't this play the sound?
 
-    // // Modern approach: use AudioWorklet instead of ScriptProcessor
-    // var javascriptNode = null;
-    
-    // // Create a simple audio worklet to handle visualization
-    // async function setupAudioWorklet() {
-    //   try {
-    //     if (context.audioWorklet) {
-    //       await context.audioWorklet.addModule('data:text/javascript;charset=utf-8,' + encodeURIComponent(`
-    //         class SpectrumAnalyzer extends AudioWorkletProcessor {
-    //           process(inputs, outputs, parameters) {
-    //             // This is a minimal implementation for visualization
-    //             return true;
-    //           }
-    //         }
-    //         registerProcessor('spectrum-analyzer', SpectrumAnalyzer);
-    //       `));
-          
-    //       // Create audio worklet node for visualization
-    //       javascriptNode = new AudioWorkletNode(context, 'spectrum-analyzer');
-    //       javascriptNode.connect(context.destination);
-    //     } else {
-    //       // Fallback to ScriptProcessor (deprecated but still works)
-    //       javascriptNode = context.createScriptProcessor(2048, 1, 1);
-    //       javascriptNode.connect(context.destination);
-    //     }
-    //   } catch (e) {
-    //     // Fallback to ScriptProcessor if AudioWorklet fails
-    //     javascriptNode = context.createScriptProcessor(2048, 1, 1);
-    //     javascriptNode.connect(context.destination);
-    //   }
-    // }
+      analyser.connect(javascriptNode)
+      analyser.connect(context.destination)
 
 
-    javascriptNode = context.createScriptProcessor(2048, 1, 1)
-    javascriptNode.connect(context.destination)  // why doesn't this play the sound?
+      // build our symphony of destruction
+      oscs = []
+      gains = []
+      filters = {}
+      freqs = [240, 270, 300, 320, 360, 400, 450
+        , 480, 540, 600, 640, 720, 800, 900
+        , 960, 1080, 1200, 1280, 1440, 1600, 1800
+        , 1920, 2160, 2400, 2560, 2880, 3200, 3600
+        , 3840, 4320, 4800, 5120, 5760, 6400, 7200]
 
-    analyser.connect(javascriptNode)
-    analyser.connect(context.destination)
+      for(var i = 0; i < 25; i++) {
+        var gain = context.createGain()
+        gain.connect(maingain)
+        gain.gain.value = 0
 
+        var osc = context.createOscillator()
+        osc.frequency.value = freqs[i]
+        osc.start(0)
+        osc.connect(gain)
 
-    // build our symphony of destruction
-    oscs = []
-    gains = []
-    filters = {}
-    freqs = [ 240,   270,   300,   320,   360,   400,   450
-            , 480,   540,   600,   640,   720,   800,   900
-            , 960,   1080,  1200,  1280,  1440,  1600,  1800
-            , 1920,  2160,  2400,  2560,  2880,  3200,  3600
-            , 3840,  4320,  4800,  5120,  5760,  6400,  7200 ]
+        // filters[j].notes.push(gain)
+        gains.push(gain)
+        oscs.push(osc)
+      }
 
-    for(var i=0; i < 25; i++) {
+      // Z is special
       var gain = context.createGain()
-      gain.connect(maingain)
+        , noise = context.createScriptProcessor(4096, 1, 1)
+
       gain.gain.value = 0
-
-      var osc = context.createOscillator()
-      osc.frequency.value = freqs[i]
-      osc.start(0)
-      osc.connect(gain)
-
-      // filters[j].notes.push(gain)
+      gain.connect(maingain)
+      noise.connect(gain)
       gains.push(gain)
-      oscs.push(osc)
-    }
+      oscs.push(noise)
 
-    // Z is special
-    var gain  = context.createGain()
-      , noise = context.createScriptProcessor(4096, 1, 1)
-
-    gain.gain.value = 0
-    gain.connect(maingain)
-    noise.connect(gain)
-    gains.push(gain)
-    oscs.push(noise)
-
-    noise.onaudioprocess = function(e) {
-      var output = e.outputBuffer.getChannelData(0)
-      for (var i = 0; i < 4096; i++) {
-        output[i] = Math.random() * 2 - 1
+      noise.onaudioprocess = function (e) {
+        var output = e.outputBuffer.getChannelData(0)
+        for(var i = 0; i < 4096; i++) {
+          output[i] = Math.random() * 2 - 1
+        }
       }
-    }
 
-    // Audio context needs to be resumed after user interaction
-    document.body.addEventListener('click', function() {
-      if (context.state === 'suspended') {
-        context.resume();
+
+      // viz stuff... yurmx
+      // (mostly stolen from www.smartjava.org/examples/webaudio/)
+      ctx = el('canvas').getContext("2d") // FIXME: global yuck yuck
+      var gradient = ctx.createLinearGradient(0, 0, 0, 50)
+      gradient.addColorStop(1, '#00ff00')
+      gradient.addColorStop(0, '#ffff00')
+      javascriptNode.onaudioprocess = function () {
+        // get the average for the first channel
+        var array = new Uint8Array(analyser.frequencyBinCount)
+        analyser.getByteFrequencyData(array)
+
+        // clear the current state
+        ctx.clearRect(0, 0, 1100, 50)
+
+        // set the fill style
+        ctx.fillStyle = gradient
+        drawSpectrum(array)
       }
-    }, { once: true });
+
+    }
 
 
     // read playfield
@@ -174,7 +179,7 @@
           .replace(/[a-z&'()*+,\-.\/]/g, ' ')
           .replace(/[^ A-Z0-9\n]/g, '')
           .split("\n")
-          .map(function(line) {
+          .map(function (line) {
             line = line.slice(0, field_length)
             line = line + Array(field_length - line.length + 1).join(' ')
             return line.split('')
@@ -182,13 +187,13 @@
 
       // look for generators
       copy = JSON.parse(JSON.stringify(field))
-      for(var i=0, l=copy.length; i < l; i++) {
-        for(var j=0, k=copy[i].length; j < k; j++) {
+      for(var i = 0, l = copy.length; i < l; i++) {
+        for(var j = 0, k = copy[i].length; j < k; j++) {
           if(copy[i][j] != ' ') {
             // how big is it?
             var c = copy[i][j]
               , row = i
-              , col = j+1
+              , col = j + 1
               , count = 1
               , width = 1
 
@@ -228,17 +233,17 @@
 
 
     // manipulate playfield
-    var step_field = function(field, generators, time) {
-      for(var y=0, l=field.length; y < l; y++) { // ugh yuck yuck
-        for(var x=0, k=field[y].length; x < k; x++) {
+    function step_field (field, generators, time) {
+      for(var y = 0, l = field.length; y < l; y++) { // ugh yuck yuck
+        for(var x = 0, k = field[y].length; x < k; x++) {
           copy[y][x] = field[y][x]
           // copy[y][x] = ' '
         }
       }
 
       // move things
-      for(var y=0, l=field.length; y < l; y++) {
-        for(var x=0, k=field[y].length; x < k; x++) {
+      for(var y = 0, l = field.length; y < l; y++) {
+        for(var x = 0, k = field[y].length; x < k; x++) {
           var old_c = field[y][x]
 
           // copy[y][x] = ' '
@@ -257,8 +262,8 @@
 
           // anything immediate?
           close_encounters:
-          for(var ydel=-1; ydel <= 1; ydel++) {
-            for(var xdel=-1; xdel <= 1; xdel++) {
+          for(var ydel = -1; ydel <= 1; ydel++) {
+            for(var xdel = -1; xdel <= 1; xdel++) {
               if(y + ydel != bound(y + ydel, field.length) || x + xdel != bound(x + xdel, field[y].length))
                 continue
 
@@ -284,30 +289,30 @@
           do_movement:
           while(distance++ < 15) {
             var row_min = Math.max(y - distance, 0)
-              , row_max = Math.min(y + distance, field.length-1)
+              , row_max = Math.min(y + distance, field.length - 1)
               , col_min = Math.max(x - distance, 0)
-              , col_max = Math.min(x + distance, field[y].length-1)
+              , col_max = Math.min(x + distance, field[y].length - 1)
 
             for(var i = col_min; i <= col_max; i++) { // top
               if(other.test(field[row_min][i]))
-                if(trytrymove(y, x, row_min-y, i-x))
+                if(trytrymove(y, x, row_min - y, i - x))
                   break do_movement
             }
 
             for(var i = row_min; i <= row_max; i++) { // sides
               if(other.test(field[i][col_min])) {
-                if(trytrymove(y, x, i-y, col_min-x))
+                if(trytrymove(y, x, i - y, col_min - x))
                   break do_movement
               }
               if(other.test(field[i][col_max])) {
-                if(trytrymove(y, x, i-y, col_max-x))
+                if(trytrymove(y, x, i - y, col_max - x))
                   break do_movement
               }
             }
 
             for(var i = col_min; i <= col_max; i++) { // bottom
               if(other.test(field[row_max][i])) {
-                if(trytrymove(y, x, row_max-y, i-x))
+                if(trytrymove(y, x, row_max - y, i - x))
                   break do_movement
               }
             }
@@ -340,7 +345,7 @@
       }
 
       // spawn things
-      for(var i=0, l=generators.length; i < l; i++) {
+      for(var i = 0, l = generators.length; i < l; i++) {
         var gen = generators[i]
           , is_alpha = /[A-Z]/.test(gen.note)
           , spawn_col = bound(is_alpha ? gen.col + gen.width : gen.col - 1, field[gen.row].length)
@@ -349,10 +354,10 @@
         if(!(time % modulo)) {
           // copy[gen.row - 1 < 0 ? copy.length-1 : gen.row - 1][gen.col] = // TODO: look before we smash
 
-          var old_c    = copy[gen.row][spawn_col]
+          var old_c = copy[gen.row][spawn_col]
             , new_note = gen.note.charCodeAt(0) > 57
-                         ? gen.note.toLowerCase()
-                         : String.fromCharCode(gen.note.charCodeAt(0) - 10)
+              ? gen.note.toLowerCase()
+              : String.fromCharCode(gen.note.charCodeAt(0) - 10)
 
           if(old_c != ' ') { // look before we smash
             if(collide(time, old_c, new_note)) {
@@ -368,9 +373,9 @@
       return copy
     }
 
-    var trytrymove = function(y, x, ydel, xdel) {
+    function trytrymove (y, x, ydel, xdel) {
       var yoffset = Math.abs(ydel) >= Math.abs(xdel) ? ydel / Math.abs(ydel) : 0
-        , xoffset = Math.abs(xdel) >  Math.abs(ydel) ? xdel / Math.abs(xdel) : 0
+        , xoffset = Math.abs(xdel) > Math.abs(ydel) ? xdel / Math.abs(xdel) : 0
 
       // can i move there?
       if(trymove(y, x, yoffset, xoffset))
@@ -385,7 +390,7 @@
         return true
     }
 
-    var trymove = function(y, x, yoffset, xoffset) {
+    function trymove (y, x, yoffset, xoffset) {
       var new_y = Math.max(y + yoffset, 0)
         , new_x = Math.max(x + xoffset, 0)
 
@@ -402,39 +407,39 @@
       }
     }
 
-//    var is_other = function(x, y, other) {
-//      var other = is_alpha ?
-//                  /[&'()*+,\-.\/]/ :
-//                  /[a-z]/
-//
-//      if(other.test(field[y][x])) {
-//        return true
-//        if(is_alpha) { // do nothing
-//        } else {
-//
-//        }
-//      }
-//      if(collide(time, old_c, new_c)) {
-//        copy[y][x] = ' '
-//        copy[new_y][new_x] = ' '
-//      }
-//      // can i move there?
-//      else if(new_c == ' ') {
-//        copy[y][x] = ' '
-//        copy[new_y][new_x] = old_c
-//      }
-//
-//    }
+    //    var is_other = function(x, y, other) {
+    //      var other = is_alpha ?
+    //                  /[&'()*+,\-.\/]/ :
+    //                  /[a-z]/
+    //
+    //      if(other.test(field[y][x])) {
+    //        return true
+    //        if(is_alpha) { // do nothing
+    //        } else {
+    //
+    //        }
+    //      }
+    //      if(collide(time, old_c, new_c)) {
+    //        copy[y][x] = ' '
+    //        copy[new_y][new_x] = ' '
+    //      }
+    //      // can i move there?
+    //      else if(new_c == ' ') {
+    //        copy[y][x] = ' '
+    //        copy[new_y][new_x] = old_c
+    //      }
+    //
+    //    }
 
 
-    var collide = function(time, old_c, new_c) {
-      if(  (/[a-z]/.test(old_c) && /[&'()*+,\-.\/]/.test(new_c))
-        || (/[a-z]/.test(new_c) && /[&'()*+,\-.\/]/.test(old_c)) ) {
+    function collide (time, old_c, new_c) {
+      if((/[a-z]/.test(old_c) && /[&'()*+,\-.\/]/.test(new_c))
+        || (/[a-z]/.test(new_c) && /[&'()*+,\-.\/]/.test(old_c))) {
         // console.log('Oh! ' + copy[y][x] + ' ran smack into ' + copy[new_y][new_x] + '!! Ouch!')
         // field[y][x] = ' ' // yuck
         // field[new_y][new_x] = ' ' // yuck
 
-        var num   = Math.min(old_c.charCodeAt(0), new_c.charCodeAt(0)) - 37
+        var num = Math.min(old_c.charCodeAt(0), new_c.charCodeAt(0)) - 37
           , alpha = Math.max(old_c.charCodeAt(0), new_c.charCodeAt(0)) - 97
 
         activate(time, num, alpha)
@@ -443,18 +448,18 @@
       }
     }
 
-    var bound = function(num, limit) {
+    function bound (num, limit) {
       if(num < 0)
-        return limit-1
+        return limit - 1
       if(num >= limit)
         return 0
       return num
     }
 
 
-    var activate = function(time, num, alpha) {
+    function activate (time, num, alpha) {
       var gain = gains[alpha]
-        , duration = Math.pow(2, num+2) / 1000
+        , duration = Math.pow(2, num + 2) / 1000
 
       var now = context.currentTime
       gain.gain.cancelScheduledValues(now)
@@ -463,13 +468,13 @@
       gain.gain.linearRampToValueAtTime(0, now + duration)
     }
 
-    var run = function() {
+    function run () {
       if(!g_pause)
         run_once()
       timeout = setTimeout(run, 1000 / tempo)
     }
 
-    var run_once = function() {
+    function run_once () {
       step_field(field, generators, time)
       var temp = field
       field = copy
@@ -478,29 +483,10 @@
     }
 
 
-    // viz stuff... yurmx
-    // (mostly stolen from www.smartjava.org/examples/webaudio/)
-    ctx = el('canvas').getContext("2d"); // FIXME: global yuck yuck
-    var gradient = ctx.createLinearGradient(0,0,0,50);
-    gradient.addColorStop(1,'#00ff00');
-    gradient.addColorStop(0,'#ffff00');
-    javascriptNode.onaudioprocess = function() {
-      // get the average for the first channel
-      var array =  new Uint8Array(analyser.frequencyBinCount);
-      analyser.getByteFrequencyData(array);
-
-      // clear the current state
-      ctx.clearRect(0, 0, 1100, 50);
-
-      // set the fill style
-      ctx.fillStyle=gradient;
-      drawSpectrum(array);
-    }
-
     function drawSpectrum(array) {
-      for ( var i = 0; i < (array.length); i++ ){
+      for(var i = 0; i < (array.length); i++) {
         var value = array[i]
-        ctx.fillRect(i*2, 55-(value/5), 1, 50)
+        ctx.fillRect(i * 2, 55 - (value / 5), 1, 50)
       }
     }
 
@@ -511,24 +497,25 @@
       return 0,
         field
           .replace(/(.{1,80}).*/g,                             // coerce line lengths
-            function(m, p1)
-              {return p1 +
+            function (m, p1) {
+              return p1 +
                 Array(line_length - p1.length)
-                  .join(' ')})
+                  .join(' ')
+            })
           .replace(/[^A-Z0-9]/g, ' ')                          // only keep generators
           .replace(/ /g, '_')                                  // spaces aren't uriable
           .replace(/_(_+)_/g,                                  // compress long spaces
-            function(match, inner)
-              {return '-' + inner.length + '_'}) }
+            function (match, inner) {return '-' + inner.length + '_'})
+    }
 
     function url_string_to_field(string, line_length) {
       return 0,
         string
           .replace(/-(\d+)_/g,                                 // decompress spaces
-            function(match, inner)
-              {return Array(+inner+ 3).join('_')})
+            function (match, inner) {return Array(+inner + 3).join('_')})
           .replace(/_/g, ' ')
-          .replace(RegExp('.{' + line_length + '}', 'g'), "$&\n") }
+          .replace(RegExp('.{' + line_length + '}', 'g'), "$&\n")
+    }
 
     function on_field_change(field, line_length) {
       set_url(field_to_url_string(field, line_length))
@@ -540,7 +527,7 @@
         window.location.search
           .substring(1)
           .split('&')
-          .reduce(function(acc, item) {
+          .reduce(function (acc, item) {
             return item ? add_value.apply(null, item.split('=').concat([acc])) : acc
           }, {})
     }
@@ -551,15 +538,15 @@
     }
 
     function set_tempo(value) {
-      tempo = value || 50
+      tempo = +value || tempo
     }
 
     function set_volume(value) {
-      maingain.gain.value = value
+      maingain.gain.value = +value
     }
 
     function set_url(url_string, tempo) {
-      var state = { tempo: tempo, url_string: url_string }
+      var state = {tempo: tempo, url_string: url_string}
       history.pushState(state, '', '?tempo=' + tempo + '&field=' + url_string)
     }
 
@@ -575,58 +562,53 @@
 
     function draw_field(field) {
       field_el.textContent = typeof field == 'string'
-                           ? field
-                           : field.map(function(line) { return line.join('') })
-                                  .join("\n") }
-
-    // function start() {
-    //   if(g_pause) return
-    //   on_field_change(field_el.textContent, field_length)
-    //     /* set_field(field_el.textContent, field_length) */
-    //   run()
-    // }
-
-    // function stop() {
-    //   g_pause = true
-    // }
+        ? field
+        : field.map(function (line) {return line.join('')})
+          .join("\n")
+    }
 
     function plause() {
       g_pause = !g_pause
     }
 
-    function on_load() {
+    function setup_presets() {
+      let preset1 = "A-16_9-138_CCCCC-17_33333-49_CCCCC-17_33333-129_EEEEE-18_4444-134_WW-76_WW-76_WW-76_WW-39_MM-6_4-24_WW-39_OO-4_7-26_WW-39_QQ-5_5-25_WW-231_ZZZZ-10_1111-58_ZZZZ-10_1111-22_DD-4_2-25_ZZZZ-10_1111-22_DD-4_22-24_ZZZZ-10_1111-58_ZZZ-11_111-58_"
+      let preset2 = "AAAAAAA-9_33333333-52_CCCCCCC-17_33333333-44_EEEEEEE-25_33333333-676_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-197_"
+      let preset3 = "-4_Q-27_9-55_S-18_2-125_5-24_TT-49_5-20_4-54_3-11_XX-62_3-6_8-237_2-91_GG-4_9-77_9-43_AA-12_MM-2_7-9_9-43_AA-30_9-3_11-76_11-35_"
+      
+      el('preset1-button').onclick = function (e) { set_field(preset1, field_length) }
+      el('preset2-button').onclick = function (e) { set_field(preset2, field_length) }
+      el('preset3-button').onclick = function (e) { set_field(preset3, field_length) }
+    }
+
+    function init() {
       var params = get_uri_params()
       set_tempo(params.tempo)
       set_field(params.field || preset1, field_length)
       run()
     }
 
-    var preset1 = "A-16_9-138_CCCCC-17_33333-49_CCCCC-17_33333-129_EEEEE-18_4444-134_WW-76_WW-76_WW-76_WW-39_MM-6_4-24_WW-39_OO-4_7-26_WW-39_QQ-5_5-25_WW-231_ZZZZ-10_1111-58_ZZZZ-10_1111-22_DD-4_2-25_ZZZZ-10_1111-22_DD-4_22-24_ZZZZ-10_1111-58_ZZZ-11_111-58_"
-    var preset2 = "AAAAAAA-9_33333333-52_CCCCCCC-17_33333333-44_EEEEEEE-25_33333333-676_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-197_"
-    var preset3 = "-4_Q-27_9-55_S-18_2-125_5-24_TT-49_5-20_4-54_3-11_XX-62_3-6_8-237_2-91_GG-4_9-77_9-43_AA-12_MM-2_7-9_9-43_AA-30_9-3_11-76_11-35_"
 
     // DOM bindings
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
+      el('plause').onclick = function (e) {plause()}
+      el('tempo').oninput = function (e) {set_tempo(+e.target.value)}
+      el('volume').oninput = function (e) {set_volume(+e.target.value)}
 
-      // el('stop').onclick    = function(e) { stop() }
-      // el('start').onclick   = function(e) { start() }
-      el('plause').onclick   = function(e) { plause() }
-      el('tempo').onchange  = function(e) { set_tempo(+e.target.value) }
-      el('volume').onchange = function(e) { set_volume(+e.target.value) }
+      setup_presets() 
 
-      el('preset1-button').onclick = function(e) {
-        set_field(preset1, field_length) }
+      // Audio context needs to be resumed after user interaction
+      document.body.addEventListener('click', function () {
+        audio_setup()
+        if(context.state === 'suspended') {
+          context.resume()
+        }
+      }, {once: true})
 
-      el('preset2-button').onclick = function(e) {
-        set_field(preset2, field_length) }
-
-      el('preset3-button').onclick = function(e) {
-        set_field(preset3, field_length) }
-
-      on_load()
-
+      init()
     })
 
   </script>
 </body>
+
 </html>
