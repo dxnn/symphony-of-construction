@@ -63,11 +63,12 @@
   <p></p>
 
   <button id="plause">▶⏸</button>
-  <label for="tempo">Tempo</label><input type="range" name="tempo" value="10" min="1" max="100" id="tempo">
-  <label for="volume">Volume</label><input type="range" name="volume" value="0.5" min="0" max="1" step="0.01"
-    id="volume">
+  <label for="tempo">BPM</label>
+  <pre id="tempo" contenteditable="true" style="display:inline; width:3em">125</pre>
+  <label for="volume">Volume</label>
+  <pre id="volume" contenteditable="true" style="display:inline; width:3em">5</pre>
 
-  <canvas id="canvas" width="1100" height="50"></canvas>
+  <pre id="freqq"></pre>
 
   <input type="button" name="preset1-button" value="Preset 1" class="preset" id="preset1-button">
   <input type="button" name="preset2-button" value="Preset 2" class="preset" id="preset2-button">
@@ -77,8 +78,9 @@
     // some helper items
     let el = document.getElementById.bind(document)
     let field_el = el('field')
+    // let ctx = el('canvas').getContext("2d")
 
-    let tempo = 10
+    let tempo = 125
     let field = []
     let copy = []
     let generators = []
@@ -86,6 +88,7 @@
     let time = 0
     let context, analyser, maingain
     let g_pause = true
+    let presets = []
 
     // set up the audio nodes
     function audio_setup() {
@@ -94,10 +97,11 @@
       maingain = context.createGain()
 
       maingain.connect(analyser)
-      maingain.gain.value = 0.5
+      set_volume()
+      // maingain.gain.value = 0.5
 
       analyser.smoothingTimeConstant = 0.1
-      analyser.fftSize = 1024
+      analyser.fftSize = 128
 
       javascriptNode = context.createScriptProcessor(2048, 1, 1)
       javascriptNode.connect(context.destination)  // why doesn't this play the sound?
@@ -110,11 +114,11 @@
       oscs = []
       gains = []
       filters = {}
-      freqs = [240, 270, 300, 320, 360, 400, 450
-        , 480, 540, 600, 640, 720, 800, 900
-        , 960, 1080, 1200, 1280, 1440, 1600, 1800
-        , 1920, 2160, 2400, 2560, 2880, 3200, 3600
-        , 3840, 4320, 4800, 5120, 5760, 6400, 7200]
+      freqs = [240,  270,  300,  320,  360,  400,  450   // A-G
+             , 480,  540,  600,  640,  720,  800,  900   // H-N
+             , 960,  1080, 1200, 1280, 1440, 1600, 1800  // O-U
+             , 1920, 2160, 2400, 2560, 2880, 3200, 3600  // V-Z
+             , 3840, 4320, 4800, 5120, 5760, 6400, 7200] // ???
 
       for(var i = 0; i < 25; i++) {
         var gain = context.createGain()
@@ -148,26 +152,25 @@
         }
       }
 
-
-      // viz stuff... yurmx
-      // (mostly stolen from www.smartjava.org/examples/webaudio/)
-      ctx = el('canvas').getContext("2d") // FIXME: global yuck yuck
-      var gradient = ctx.createLinearGradient(0, 0, 0, 50)
-      gradient.addColorStop(1, '#00ff00')
-      gradient.addColorStop(0, '#ffff00')
       javascriptNode.onaudioprocess = function () {
-        // get the average for the first channel
         var array = new Uint8Array(analyser.frequencyBinCount)
         analyser.getByteFrequencyData(array)
-
-        // clear the current state
-        ctx.clearRect(0, 0, 1100, 50)
-
-        // set the fill style
-        ctx.fillStyle = gradient
         drawSpectrum(array)
       }
+    }
 
+    function drawSpectrum(fs) {
+      let rows = 8, cols = fs.length, letem = 25 / cols
+      let xs = Array(rows * cols).fill(' ')
+      for(let x = 0; x < cols; x++) {
+        let v = Math.ceil(fs[x] / 255 * rows)
+        for(let y = 0; y < v; y++) {
+          let i = ((rows - 1 - y) * cols) + x
+          xs[i] = String.fromCharCode(65 + Math.floor(letem * x))
+        }
+      }
+      let str = xs.join('')
+      el('freqq').textContent = str.match(/.{1,64}/g).join("\n")
     }
 
 
@@ -471,7 +474,7 @@
     function run () {
       if(!g_pause)
         run_once()
-      timeout = setTimeout(run, 1000 / tempo)
+      timeout = setTimeout(run, 60 * 1000 / tempo / 4) // 4 quarters
     }
 
     function run_once () {
@@ -480,14 +483,6 @@
       field = copy
       copy = temp
       draw_field(field)
-    }
-
-
-    function drawSpectrum(array) {
-      for(var i = 0; i < (array.length); i++) {
-        var value = array[i]
-        ctx.fillRect(i * 2, 55 - (value / 5), 1, 50)
-      }
     }
 
 
@@ -537,13 +532,6 @@
       return acc
     }
 
-    function set_tempo(value) {
-      tempo = +value || tempo
-    }
-
-    function set_volume(value) {
-      maingain.gain.value = +value
-    }
 
     function set_url(url_string, tempo) {
       var state = {tempo: tempo, url_string: url_string}
@@ -552,9 +540,8 @@
 
     function set_field(url_string, field_length) {
       var field = url_string_to_field(url_string, field_length)
-
       stop()
-      set_url(url_string, tempo)
+      // set_url(url_string, tempo)
       draw_field(field)
       import_field(field)
       // run()
@@ -567,42 +554,53 @@
           .join("\n")
     }
 
+
+    function clamp(min, n, max) {
+      return min > n ? min 
+           : n > max ? max
+                     : n
+    }
+
+    function set_tempo(value) {
+      tempo = clamp(10, +value, 1000) || 125 // BPM
+    }
+
+    function set_volume(value) {
+      maingain.gain.value = (clamp(0, +value, 100) || 5) / 100
+    }
+
     function plause() {
       g_pause = !g_pause
     }
 
     function setup_presets() {
-      let preset1 = "A-16_9-138_CCCCC-17_33333-49_CCCCC-17_33333-129_EEEEE-18_4444-134_WW-76_WW-76_WW-76_WW-39_MM-6_4-24_WW-39_OO-4_7-26_WW-39_QQ-5_5-25_WW-231_ZZZZ-10_1111-58_ZZZZ-10_1111-22_DD-4_2-25_ZZZZ-10_1111-22_DD-4_22-24_ZZZZ-10_1111-58_ZZZ-11_111-58_"
-      let preset2 = "AAAAAAA-9_33333333-52_CCCCCCC-17_33333333-44_EEEEEEE-25_33333333-676_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-197_"
-      let preset3 = "-4_Q-27_9-55_S-18_2-125_5-24_TT-49_5-20_4-54_3-11_XX-62_3-6_8-237_2-91_GG-4_9-77_9-43_AA-12_MM-2_7-9_9-43_AA-30_9-3_11-76_11-35_"
+      presets[0] = "A-16_9-138_CCCCC-17_33333-49_CCCCC-17_33333-129_EEEEE-18_4444-134_WW-76_WW-76_WW-76_WW-39_MM-6_4-24_WW-39_OO-4_7-26_WW-39_QQ-5_5-25_WW-231_ZZZZ-10_1111-58_ZZZZ-10_1111-22_DD-4_2-25_ZZZZ-10_1111-22_DD-4_22-24_ZZZZ-10_1111-58_ZZZ-11_111-58_"
+      presets[1] = "AAAAAAA-9_33333333-52_CCCCCCC-17_33333333-44_EEEEEEE-25_33333333-676_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-197_"
+      presets[2] = "-4_Q-27_9-55_S-18_2-125_5-24_TT-49_5-20_4-54_3-11_XX-62_3-6_8-237_2-91_GG-4_9-77_9-43_AA-12_MM-2_7-9_9-43_AA-30_9-3_11-76_11-35_"
       
-      el('preset1-button').onclick = function (e) { set_field(preset1, field_length) }
-      el('preset2-button').onclick = function (e) { set_field(preset2, field_length) }
-      el('preset3-button').onclick = function (e) { set_field(preset3, field_length) }
+      el('preset1-button').onclick = function (e) { set_field(presets[0], field_length) }
+      el('preset2-button').onclick = function (e) { set_field(presets[1], field_length) }
+      el('preset3-button').onclick = function (e) { set_field(presets[2], field_length) }
     }
 
     function init() {
-      var params = get_uri_params()
-      set_tempo(params.tempo)
-      set_field(params.field || preset1, field_length)
+      setup_presets()
+      let params = get_uri_params()
+      set_tempo(params.tempo || tempo)
+      set_field(params.field || presets[0], field_length)
       run()
     }
-
 
     // DOM bindings
     document.addEventListener('DOMContentLoaded', function () {
       el('plause').onclick = function (e) {plause()}
-      el('tempo').oninput = function (e) {set_tempo(+e.target.value)}
-      el('volume').oninput = function (e) {set_volume(+e.target.value)}
+      el('tempo').oninput = function (e) {set_tempo(e.target.textContent)}
+      el('volume').oninput = function (e) {set_volume(e.target.textContent)}
 
-      setup_presets() 
-
-      // Audio context needs to be resumed after user interaction
-      document.body.addEventListener('click', function () {
+      document.body.addEventListener('click', function () { // Audio context needs to be resumed after user interaction
         audio_setup()
-        if(context.state === 'suspended') {
+        if(context.state === 'suspended') 
           context.resume()
-        }
       }, {once: true})
 
       init()
