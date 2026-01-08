@@ -28,10 +28,42 @@
     pre {
       width: 100vw;
       font-size: clamp(12px, 2.2vw, 40px);
+      overflow: hidden;
     }
-    
+   
+    #container {
+      position: relative;
+      /* height: 30em; */
+    } 
+
+    #container pre {
+      margin: 0px;
+    }
+
+    #subfield {
+      z-index: -10;
+    }
+ 
     #field {
-      height: 30em;
+      position:absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    #selectfield {
+      position:absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+    }
+
+    #selectfield::selection {
+      background: transparent;
+      color: inherit;
     }
 
     button, input {
@@ -39,6 +71,10 @@
       background-color: transparent;
     }
 
+    .selection {
+      background-color: rgb(0, 255, 102);
+    }
+      
   </style>
 </head>
 
@@ -58,7 +94,11 @@
 <em>A browser-based zero-player roguelike cellular automata modular synthesizer</em>
   </pre>
 
-  <pre id="field"></pre>
+  <div id="container">
+    <pre id="subfield"></pre>
+    <pre id="field"></pre>
+    <pre id="selectfield"></pre>
+  </div>
 
   <p></p>
 
@@ -70,6 +110,7 @@
 
   <pre id="freqq"></pre>
 
+  <input type="button" name="clear-button"   value="Clear" class="preset" id="clear-button">
   <input type="button" name="preset1-button" value="Preset 1" class="preset" id="preset1-button">
   <input type="button" name="preset2-button" value="Preset 2" class="preset" id="preset2-button">
   <input type="button" name="preset3-button" value="Preset 3" class="preset" id="preset3-button">
@@ -78,17 +119,22 @@
     // some helper items
     let el = document.getElementById.bind(document)
     let field_el = el('field')
-    // let ctx = el('canvas').getContext("2d")
+    let subfield_el = el('subfield')
+    let selectfield_el = el('selectfield')
 
     let tempo = 125
     let field = []
     let copy = []
     let generators = []
     let field_length = 80
+    let field_rows = 24
     let time = 0
     let context, analyser, maingain
     let g_pause = true
     let presets = []
+    let sell_ect = {}
+    let gotime = false
+    
 
     // set up the audio nodes
     function audio_setup() {
@@ -98,10 +144,9 @@
 
       maingain.connect(analyser)
       set_volume()
-      // maingain.gain.value = 0.5
 
       analyser.smoothingTimeConstant = 0.1
-      analyser.fftSize = 128
+      analyser.fftSize = 256
 
       javascriptNode = context.createScriptProcessor(2048, 1, 1)
       javascriptNode.connect(context.destination)  // why doesn't this play the sound?
@@ -160,7 +205,7 @@
     }
 
     function drawSpectrum(fs) {
-      let rows = 8, cols = fs.length, letem = 25 / cols
+      let rows = 8, cols = 64, letem = 25 / cols
       let xs = Array(rows * cols).fill(' ')
       for(let x = 0; x < cols; x++) {
         let v = Math.ceil(fs[x] / 255 * rows)
@@ -539,7 +584,7 @@
     }
 
     function set_field(url_string, field_length) {
-      var field = url_string_to_field(url_string, field_length)
+      let field = url_string_to_field(url_string, field_length)
       stop()
       // set_url(url_string, tempo)
       draw_field(field)
@@ -578,12 +623,15 @@
       presets[1] = "AAAAAAA-9_33333333-52_CCCCCCC-17_33333333-44_EEEEEEE-25_33333333-676_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-197_"
       presets[2] = "-4_Q-27_9-55_S-18_2-125_5-24_TT-49_5-20_4-54_3-11_XX-62_3-6_8-237_2-91_GG-4_9-77_9-43_AA-12_MM-2_7-9_9-43_AA-30_9-3_11-76_11-35_"
       
+      el('clear-button').onclick = function (e) { set_field(" ", field_length) }
       el('preset1-button').onclick = function (e) { set_field(presets[0], field_length) }
       el('preset2-button').onclick = function (e) { set_field(presets[1], field_length) }
       el('preset3-button').onclick = function (e) { set_field(presets[2], field_length) }
     }
 
     function init() {
+      spaceout(subfield_el)
+      spaceout(selectfield_el)
       setup_presets()
       let params = get_uri_params()
       set_tempo(params.tempo || tempo)
@@ -603,8 +651,93 @@
           context.resume()
       }, {once: true})
 
+      document.addEventListener('keyup', e => {
+        if(!gotime) return // TODO: maybe delete this, since it mirrors sell_ect
+        let key = e.key.toUpperCase() // TODO: get rid of field_length, make it uniform
+        console.log(key)
+        if(!/[0-9A-Z]/.test(key)) return
+        add_block(key, sell_ect)
+      }) 
+
+      document.addEventListener('click', e => { 
+        if (!selectfield_el.contains(e.target)) {
+          spaceout(subfield_el)
+          sell_ect = {}
+          gotime = false
+        }
+      })
+
       init()
     })
+
+
+    // ???
+
+    function add_block(char, {start, end}) {
+      
+    }
+
+    function spaceout(el) {
+      el.textContent = spaces()
+    }
+
+    function spaces() {
+      let line = Array(field_length).fill(' ').join('')
+      let box = Array(field_rows).fill(line).join("\n")
+      return box
+    }
+
+    function getRowCol(node, offset) {
+      const before = document.createRange()
+      before.selectNodeContents(selectfield_el)
+      before.setEnd(node, offset)
+      const text = before.toString()
+      const lines = text.split('\n')
+      const row = lines.length - 1
+      const col = lines[lines.length - 1].length
+      return {row, col}
+    }
+
+    document.addEventListener('selectionchange', () => {
+      const sel = window.getSelection()
+      if(!sel.rangeCount || !selectfield_el.contains(sel.anchorNode)) return
+
+      const range = sel.getRangeAt(0)
+      const start = getRowCol(range.startContainer, range.startOffset)
+      const end = getRowCol(range.endContainer, range.endOffset)
+      
+      // console.log(JSON.stringify({start, end}))
+      highlightBox(start, end)
+      sell_ect = {start: start, end: end}
+    })
+
+    function highlightBox(start, end) {
+      // Get original text
+      const text = subfield_el.textContent
+      const lines = text.split('\n')
+
+      // Normalize box coordinates
+      const minRow = Math.min(start.row, end.row)
+      const maxRow = Math.max(start.row, end.row)
+      const minCol = Math.min(start.col, end.col)
+      const maxCol = Math.max(start.col, end.col)
+
+      // Rebuild with spans
+      const newLines = lines.map((line, row) => {
+        if(row < minRow || row > maxRow) return line
+
+        const before = line.slice(0, minCol)
+        const box = line.slice(minCol, maxCol)
+        const after = line.slice(maxCol)
+
+        return before + '<span class="selection">' + box + '</span>' + after
+      })
+
+      subfield_el.innerHTML = newLines.join('\n')
+      gotime = true
+    }
+
+
 
   </script>
 </body>
