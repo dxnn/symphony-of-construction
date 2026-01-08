@@ -33,7 +33,6 @@
    
     #container {
       position: relative;
-      /* height: 30em; */
     } 
 
     #container pre {
@@ -87,6 +86,12 @@
     - setTimeout vs context.currentTime
     - Z is noise / hihat
     - later, allow control over individual sounds / effects
+
+    TODO:
+    - right sized field 
+    - only stringify field at edge
+      - and use a function for it 
+    
   -->
 
   <pre id="header">
@@ -102,18 +107,18 @@
 
   <p></p>
 
-  <button id="plause">▶⏸</button>
-  <label for="tempo">BPM</label>
+  <pre id="plause" style="display: inline">▶⏸</pre>
+  <pre style="display: inline">BPM</pre>
   <pre id="tempo" contenteditable="true" style="display:inline; width:3em">125</pre>
-  <label for="volume">Volume</label>
+  <pre style="display: inline">Volume</pre>
   <pre id="volume" contenteditable="true" style="display:inline; width:3em">5</pre>
 
   <pre id="freqq"></pre>
 
-  <input type="button" name="clear-button"   value="Clear" class="preset" id="clear-button">
-  <input type="button" name="preset1-button" value="Preset 1" class="preset" id="preset1-button">
-  <input type="button" name="preset2-button" value="Preset 2" class="preset" id="preset2-button">
-  <input type="button" name="preset3-button" value="Preset 3" class="preset" id="preset3-button">
+  <pre id="clear-button" style="display: inline">Clear</pre>
+  <pre id="preset1-button" style="display: inline">HazyL</pre>
+  <pre id="preset2-button" style="display: inline">Predawn</pre>
+  <pre id="preset3-button" style="display: inline">Firescape</pre>
 
   <script>
     // some helper items
@@ -133,7 +138,6 @@
     let g_pause = true
     let presets = []
     let sell_ect = {}
-    let gotime = false
     
 
     // set up the audio nodes
@@ -535,13 +539,13 @@
 
     //// field management
 
-    function field_to_url_string(field, line_length) {
+    function field_to_url_string(field) {
       return 0,
         field
-          .replace(/(.{1,80}).*/g,                             // coerce line lengths
+          .replace(/(.{1,80}).*/g,                             // coerce line lengths TODO: maybe just truncate?
             function (m, p1) {
               return p1 +
-                Array(line_length - p1.length)
+                Array(field_length - p1.length)
                   .join(' ')
             })
           .replace(/[^A-Z0-9]/g, ' ')                          // only keep generators
@@ -550,17 +554,17 @@
             function (match, inner) {return '-' + inner.length + '_'})
     }
 
-    function url_string_to_field(string, line_length) {
+    function url_string_to_field(string) {
       return 0,
         string
           .replace(/-(\d+)_/g,                                 // decompress spaces
             function (match, inner) {return Array(+inner + 3).join('_')})
           .replace(/_/g, ' ')
-          .replace(RegExp('.{' + line_length + '}', 'g'), "$&\n")
+          .replace(RegExp('.{' + field_length + '}', 'g'), "$&\n")
     }
 
-    function on_field_change(field, line_length) {
-      set_url(field_to_url_string(field, line_length))
+    function on_field_change(field) {
+      set_url(field_to_url_string(field, field_length))
       import_field(field)
     }
 
@@ -585,8 +589,8 @@
       history.pushState(state, '', '?tempo=' + tempo + '&field=' + url_string)
     }
 
-    function set_field(url_string, field_length) {
-      let field = url_string_to_field(url_string, field_length)
+    function set_field(url_string) {
+      let field = url_string_to_field(url_string)
       stop()
       // set_url(url_string, tempo)
       draw_field(field)
@@ -625,10 +629,10 @@
       presets[1] = "AAAAAAA-9_33333333-52_CCCCCCC-17_33333333-44_EEEEEEE-25_33333333-676_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-197_"
       presets[2] = "-4_Q-27_9-55_S-18_2-125_5-24_TT-49_5-20_4-54_3-11_XX-62_3-6_8-237_2-91_GG-4_9-77_9-43_AA-12_MM-2_7-9_9-43_AA-30_9-3_11-76_11-35_"
       
-      el('clear-button').onclick = function (e) { set_field(" ", field_length) }
-      el('preset1-button').onclick = function (e) { set_field(presets[0], field_length) }
-      el('preset2-button').onclick = function (e) { set_field(presets[1], field_length) }
-      el('preset3-button').onclick = function (e) { set_field(presets[2], field_length) }
+      el('clear-button').onclick = function (e) { set_field(" ") }
+      el('preset1-button').onclick = function (e) { set_field(presets[0]) }
+      el('preset2-button').onclick = function (e) { set_field(presets[1]) }
+      el('preset3-button').onclick = function (e) { set_field(presets[2]) }
     }
 
     function init() {
@@ -637,7 +641,7 @@
       setup_presets()
       let params = get_uri_params()
       set_tempo(params.tempo || tempo)
-      set_field(params.field || presets[0], field_length)
+      set_field(params.field || presets[0])
       run()
     }
 
@@ -654,8 +658,8 @@
       }, {once: true})
 
       document.addEventListener('keyup', e => {
-        if(!gotime) return // TODO: maybe delete this, since it mirrors sell_ect
-        let key = e.key.toUpperCase() // TODO: get rid of field_length, make it uniform
+        if(!sell_ect.start) return
+        let key = e.key.toUpperCase() 
         if(!/[0-9A-Z]/.test(key)) return
         add_block(key, sell_ect)
         draw_field(field)
@@ -676,14 +680,13 @@
     function clear_select() {
       spaceout(subfield_el)
       sell_ect = {}
-      gotime = false
     }
 
     function add_block(char, {start, end}) {
       for(let y=start.row; y<=end.row; y++)
         for(let x=start.col; x<end.col; x++)
           field[y][x] = char
-      on_field_change(field.map(function (line) {return line.join('')}).join("\n"), field_length)
+      on_field_change(field.map(function (line) {return line.join('')}).join("\n"))
     }
 
     function spaceout(el) {
@@ -715,7 +718,6 @@
       const start = getRowCol(range.startContainer, range.startOffset)
       const end = getRowCol(range.endContainer, range.endOffset)
       
-      // console.log(JSON.stringify({start, end}))
       highlightBox(start, end)
       sell_ect = {start: start, end: end}
     })
@@ -743,7 +745,6 @@
       })
 
       subfield_el.innerHTML = newLines.join('\n')
-      gotime = true
     }
 
 
