@@ -439,8 +439,10 @@
     }
 
     function trymove (y, x, yoffset, xoffset) {
-      var new_y = Math.max(y + yoffset, 0)
+      let new_y = Math.max(y + yoffset, 0)
         , new_x = Math.max(x + xoffset, 0)
+
+      if(!field[new_y]?.[new_x]) return
 
       if(field[new_y][new_x] == ' ' && copy[new_y][new_x] == ' ') {
         copy[y][x] = ' '
@@ -654,17 +656,15 @@
       document.addEventListener('keyup', e => {
         if(!gotime) return // TODO: maybe delete this, since it mirrors sell_ect
         let key = e.key.toUpperCase() // TODO: get rid of field_length, make it uniform
-        console.log(key)
         if(!/[0-9A-Z]/.test(key)) return
         add_block(key, sell_ect)
+        draw_field(field)
+        clear_select()
       }) 
 
       document.addEventListener('click', e => { 
-        if (!selectfield_el.contains(e.target)) {
-          spaceout(subfield_el)
-          sell_ect = {}
-          gotime = false
-        }
+        if(!selectfield_el.contains(e.target)) 
+          clear_select()
       })
 
       init()
@@ -673,8 +673,17 @@
 
     // ???
 
+    function clear_select() {
+      spaceout(subfield_el)
+      sell_ect = {}
+      gotime = false
+    }
+
     function add_block(char, {start, end}) {
-      
+      for(let y=start.row; y<=end.row; y++)
+        for(let x=start.col; x<end.col; x++)
+          field[y][x] = char
+      on_field_change(field.map(function (line) {return line.join('')}).join("\n"), field_length)
     }
 
     function spaceout(el) {
