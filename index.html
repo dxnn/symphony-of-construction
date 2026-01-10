@@ -93,7 +93,11 @@
     - later, allow control over individual sounds / effects
 
     TODO:
-    - right sized field 
+    -- why does it remove symbols when adding?
+    - why does it stretch out the saved version? 
+    - spaces should space 
+    - try funny shapes
+    - "walls"
     - only stringify field at edge
       - and use a function for it 
     
@@ -112,7 +116,7 @@
 
   <p></p>
 
-  <pre id="plause" class="link">▶⏸</pre>
+  <pre id="plause" class="link"> <span style="color: orange">play</span> </pre>
   <pre style="display: inline">BPM</pre>
   <pre id="tempo" contenteditable="true" style="display:inline; width:3em">125</pre>
   <pre style="display: inline">Volume</pre>
@@ -229,7 +233,6 @@
 
     // read playfield
     function import_field(field_string) {
-      generators = []
       field = make_field(
         field_string
           .replace(/[a-z&'()*+,\-.\/]/g, ' ')
@@ -241,55 +244,84 @@
             return line.split('')
           }))
 
-      // look for generators
-      copy = JSON.parse(JSON.stringify(field))
-      for(var i = 0, l = copy.length; i < l; i++) {
-        for(var j = 0, k = copy[i].length; j < k; j++) {
-          if(copy[i][j] != ' ') {
-            // how big is it?
-            var c = copy[i][j]
-              , row = i
-              , col = j + 1
-              , count = 1
-              , width = 1
+      get_new_gens()
+    }
 
-            copy[i][j] = ' '
-            while(row < copy.length && col < copy[0].length) {
-              if(c != copy[row][col]) {
-                if(col == j) {
-                  generators.push({count: count, note: c, row: i, col: j, width: width})
-                  count = 0
-                  break
-                }
-                width = width > 1 ? width : col - j
-                row++
-                col = j
-                continue
-              }
+    function get_new_gens() {
+      generators = [] // global
+      let copy = JSON.parse(JSON.stringify(field)) // local
 
-              copy[row][col] = ' '
-              if(++col == copy[0].length) {
-                width = width > 1 ? width : col - j
-                row++
-                col = j
-              }
-              count++
-            }
-            if(count) {
-              generators.push({count: count, note: c, row: i, col: j, width: width})
-            }
-          }
+      for(let y = 0; y < field_rows; y++) {
+        for(let x = 0; x < field_length; x++) {
+
+          if(!/[A-Z0-9]/.test(copy[y][x])) continue
+
+          let char = copy[y][x]
+          let pairs = flood_fill(copy, y, x)
+          let rx = pairs.reduce((acc, [py, px]) => py === y && px > acc ? px : acc, 0)
+
+          pairs.forEach(([py, px]) => copy[py][px] = ' ')
+          generators.push({count: pairs.length, note: char, row: y, coll: x, colr: rx})
+
+            // // how big is it?
+            // let c = copy[y][x]
+            //   , row = y
+            //   , col = x + 1
+            //   , count = 1
+            //   , width = 1
+
+          //   copy[y][x] = ' '
+          //   while(row < copy.length && col < copy[0].length) {
+          //     if(c != copy[row][col]) {
+          //       if(col == x) {
+          //         generators.push({count: count, note: c, row: y, col: x, width: width})
+          //         count = 0
+          //         break
+          //       }
+          //       width = width > 1 ? width : col - x
+          //       row++
+          //       col = x
+          //       continue
+          //     }
+
+          //     copy[row][col] = ' '
+          //     if(++col == copy[0].length) {
+          //       width = width > 1 ? width : col - x
+          //       row++
+          //       col = x
+          //     }
+          //     count++
+          //   }
+          //   if(count) {
+          //     generators.push({count: count, note: c, row: y, col: x, width: width})
+          //   }
+          // }
         }
       }
+    }
 
-      copy = JSON.parse(JSON.stringify(field)) // oy vey
-
-      // return [field, generators]
+    function flood_fill(xs, y, x) {
+      let pairs = []
+      let seen = {}
+      let todo = [[y, x]]
+      let char = xs[y][x]
+      while(todo.length) {
+        let [py, px] = todo.pop()
+        if(xs[py]?.[px] !== char) continue
+        if(seen[py+'-'+px]) continue
+        seen[py+'-'+px] = true
+        pairs.push([py, px])
+        todo.push([py+1, px])
+        todo.push([py-1, px])
+        todo.push([py, px+1])
+        todo.push([py, px-1])
+      }
+      return pairs
     }
 
 
     // manipulate playfield
-    function step_field (field, generators, time) {
+    function step_field (field, generators) {
       for(var y = 0, l = field.length; y < l; y++) { // ugh yuck yuck
         for(var x = 0, k = field[y].length; x < k; x++) {
           copy[y][x] = field[y][x]
@@ -330,7 +362,7 @@
                 if(is_alpha) // stand still
                   break close_encounters
 
-                collide(time, old_c, new_c) // or chomp everything around you
+                collide(old_c, new_c) // or chomp everything around you
                 copy[y][x] = ' '
                 copy[y + ydel][x + xdel] = ' '
               }
@@ -404,23 +436,24 @@
       for(var i = 0, l = generators.length; i < l; i++) {
         var gen = generators[i]
           , is_alpha = /[A-Z]/.test(gen.note)
-          , spawn_col = bound(is_alpha ? gen.col + gen.width : gen.col - 1, field[gen.row].length)
-          , modulo = (21 - Math.min(gen.count, 20)) * 5
+          , spawn_row = gen.row // bound(is_alpha ? gen.row - 1 : gen.row, field_rows)
+          , spawn_col = bound(is_alpha ? gen.colr + 1 : gen.coll - 1, field_length)
+          , modulo = (21 - Math.min(gen.count, 20)) // * 5
 
         if(!(time % modulo)) {
           // copy[gen.row - 1 < 0 ? copy.length-1 : gen.row - 1][gen.col] = // TODO: look before we smash
 
-          var old_c = copy[gen.row][spawn_col]
+          var old_c = copy[spawn_row][spawn_col]
             , new_note = gen.note.charCodeAt(0) > 57
-              ? gen.note.toLowerCase()
-              : String.fromCharCode(gen.note.charCodeAt(0) - 10)
+                       ? gen.note.toLowerCase()
+                       : String.fromCharCode(gen.note.charCodeAt(0) - 10)
 
           if(old_c != ' ') { // look before we smash
-            if(collide(time, old_c, new_note)) {
-              copy[gen.row][spawn_col] = ' '
+            if(collide(old_c, new_note)) {
+              copy[spawn_row][spawn_col] = ' '
             }
           } else {
-            copy[gen.row][spawn_col] = new_note
+            copy[spawn_row][spawn_col] = new_note
           }
 
         }
@@ -490,7 +523,7 @@
     //    }
 
 
-    function collide (time, old_c, new_c) {
+    function collide (old_c, new_c) {
       if((/[a-z]/.test(old_c) && /[&'()*+,\-.\/]/.test(new_c))
         || (/[a-z]/.test(new_c) && /[&'()*+,\-.\/]/.test(old_c))) {
         // console.log('Oh! ' + copy[y][x] + ' ran smack into ' + copy[new_y][new_x] + '!! Ouch!')
@@ -500,7 +533,7 @@
         var num = Math.min(old_c.charCodeAt(0), new_c.charCodeAt(0)) - 37
           , alpha = Math.max(old_c.charCodeAt(0), new_c.charCodeAt(0)) - 97
 
-        activate(time, num, alpha)
+        activate(num, alpha)
 
         return true
       }
@@ -515,7 +548,7 @@
     }
 
 
-    function activate (time, num, alpha) {
+    function activate (num, alpha) {
       var gain = gains[alpha]
         , duration = Math.pow(2, num + 2) / 1000
 
@@ -533,7 +566,8 @@
     }
 
     function run_once () {
-      step_field(field, generators, time)
+      time++
+      step_field(field, generators)
       var temp = field
       field = copy
       copy = temp
@@ -543,7 +577,7 @@
 
     //// field management
 
-    function field_to_url_string(fieldstr) {
+    function fieldstr_to_url_string(fieldstr) {
       return 0,
         fieldstr
           .replace(/(.{1,80}).*/g,                             // coerce line lengths TODO: maybe just truncate?
@@ -567,11 +601,6 @@
           .replace(RegExp('.{' + field_length + '}', 'g'), "$&\n")
     }
 
-    function on_field_change(fieldstr) {
-      set_url(field_to_url_string(fieldstr))
-      import_field(fieldstr)
-    }
-
     function get_uri_params() {
       return 0,
         window.location.search
@@ -588,9 +617,10 @@
     }
 
 
-    function set_url(url_string, t=tempo) {
-      var state = {tempo: t, url_string: url_string}
-      history.pushState(state, '', '?tempo=' + t + '&field=' + url_string)
+    function set_url() {
+      let url_string = fieldstr_to_url_string(field_to_str(field))
+      let state = {tempo, url_string}
+      history.pushState(state, '', '?tempo=' + tempo + '&field=' + url_string)
     }
 
     function set_field(url_string) {
@@ -625,6 +655,7 @@
 
     function plause() {
       g_pause = !g_pause
+      el('plause').innerHTML = g_pause ? ' <span style="color: orange">play</span> ' : ' <span style="color: green">pause</span>'
     }
 
     function setup_presets() {
@@ -698,7 +729,10 @@
       for(let y=start.row; y<=end.row; y++)
         for(let x=start.col; x<end.col; x++)
           field[y][x] = char
-      on_field_change(field_to_str(field))
+      // on_field_change(field_to_str(field))
+
+      set_url()
+      get_new_gens()
     }
 
     function field_to_str(field) {
