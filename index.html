@@ -95,13 +95,17 @@
     TODO:
     -- why does it remove symbols when adding?
     -- why does it stretch out the saved version? (goodness gracious!)
-    - modulo adjustment (1 to 32)
-    - spaces should space 
-    - try funny shapes
-    - "walls"
-    - rainbow spectrum
-    - bold generators
-    - change freqs
+    -- modulo adjustment (1 to 32)
+    -- spaces should space 
+    -- try funny shapes
+    -- Enter to play
+    -- fix borked saves
+    - make new better saves
+    -- rainbow spectrum
+    !- bold generators
+    -- change freqs
+    - longer visual range?
+    - "walls"?
     - put it online!
     - only stringify field at edge
       - and use a function for it 
@@ -152,10 +156,16 @@
     let sell_ect = {}
     let field = make_field()
     let copy = make_field()
+    let setup_done = false
 
 
     // set up the audio nodes
     function audio_setup() {
+      if(context && context.state === 'suspended') 
+          context.resume()
+      
+      if(setup_done) return
+
       context = new window.AudioContext()
       analyser = context.createAnalyser()
       maingain = context.createGain()
@@ -177,10 +187,10 @@
       oscs = []
       gains = []
       filters = {}
-      freqs = [240,  270,  300,  320,  360,  400,  450   // A-G
-             , 480,  540,  600,  640,  720,  800,  900   // H-N
+      freqs = [60, 67.5, 75, 80, 90, 100, 112.5  // A-G
+             , 240,  270,  300,  320,  360,  400,  450   // H-N
              , 960,  1080, 1200, 1280, 1440, 1600, 1800  // O-U
-             , 1920, 2160, 2400, 2560, 2880, 3200, 3600  // V-Z
+            //  , 1920, 2160, 2400, 2560, 2880, 3200, 3600  // V-Y
              , 3840, 4320, 4800, 5120, 5760, 6400, 7200] // ???
 
       for(var i = 0; i < 25; i++) {
@@ -220,11 +230,14 @@
         analyser.getByteFrequencyData(array)
         drawSpectrum(array)
       }
+
+      setup_done = true
     }
 
     function drawSpectrum(fs) {
       let rows = 8, cols = 64, letem = 25 / cols
       let xs = Array(rows * cols).fill(' ')
+
       for(let x = 0; x < cols; x++) {
         let v = Math.ceil(fs[x] / 255 * rows)
         for(let y = 0; y < v; y++) {
@@ -232,8 +245,11 @@
           xs[i] = String.fromCharCode(65 + Math.floor(letem * x))
         }
       }
-      let str = xs.join('')
-      el('freqq').textContent = str.match(/.{1,64}/g).join("\n")
+
+      let lines = xs.join('').match(/.{1,64}/g)
+      let colours = ['pink', 'red', 'orange', 'gold', 'green', 'blue', 'purple', 'violet']
+      lines = lines.map((str, i) => `<span style="color:${colours[i]}">` + str + '</span>')
+      el('freqq').innerHTML = lines.join("\n")
     }
 
 
@@ -634,9 +650,9 @@
     }
 
     function setup_presets() {
-      presets[0] = "A-16_9-138_CCCCC-17_33333-49_CCCCC-17_33333-129_EEEEE-18_4444-134_WW-76_WW-76_WW-76_WW-39_MM-6_4-24_WW-39_OO-4_7-26_WW-39_QQ-5_5-25_WW-231_ZZZZ-10_1111-58_ZZZZ-10_1111-22_DD-4_2-25_ZZZZ-10_1111-22_DD-4_22-24_ZZZZ-10_1111-58_ZZZ-11_111-58_"
-      presets[1] = "AAAAAAA-9_33333333-52_CCCCCCC-17_33333333-44_EEEEEEE-25_33333333-676_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-38_KKKKKKKK-22_11111111-197_"
-      presets[2] = "-4_Q-27_9-55_S-18_2-125_5-24_TT-49_5-20_4-54_3-11_XX-62_3-6_8-237_2-91_GG-4_9-77_9-43_AA-12_MM-2_7-9_9-43_AA-30_9-3_11-76_11-35_"
+      presets[0] = 'A-18-9-140-CCCCC-19-33333-51-CCCCC-19-33333-131-EEEEE-20-4444-136-WW-78-WW-78-WW-78-WW-41-MM-8-4-26-WW-41-OO-6-7-28-WW-41-QQ-7-5-27-WW-233-ZZZZ-12-1111-60-ZZZZ-12-1111-24-DD-6-2-27-ZZZZ-12-1111-24-DD-6-22-26-ZZZZ-12-1111-60-ZZZ-13-111-61-'
+      presets[1] = 'AAAAAAA-11-33333333-54-CCCCCCC-19-33333333-46-EEEEEEE-27-33333333-678-KKKKKKKK-24-11111111-40-KKKKKKKK-24-11111111-40-KKKKKKKK-24-11111111-200-'
+      presets[2] = '-6-Q-29-9-57-S-20-2-127-5-26-TT-51-5-22-4-56-3-13-XX-64-3-8-8-239-2-93-GG-6-9-79-9-45-AA-14-MM-4-7-11-9-45-AA-32-9-5-11-78-11-38-'
       
       el('clear-button').onclick = function (e) { set_field(" ") }
       el('preset1-button').onclick = function (e) { set_field(presets[0]) }
@@ -663,14 +679,17 @@
 
       document.body.addEventListener('click', function () { // Audio context needs to be resumed after user interaction
         audio_setup()
-        if(context.state === 'suspended') 
-          context.resume()
       }, {once: true})
 
       document.addEventListener('keyup', e => {
+        audio_setup()
+        if(e.key === 'Enter') {
+          plause()
+          return
+        }
         if(!sell_ect.start) return
         let key = e.key.toUpperCase() 
-        if(!/[0-9A-Z]/.test(key)) return
+        if(!/[0-9A-Z ]/.test(key)) return
         add_block(key, sell_ect)
         draw_field(field)
         clear_select()
@@ -704,7 +723,6 @@
       for(let y=start.row; y<=end.row; y++)
         for(let x=start.col; x<end.col; x++)
           field[y][x] = char
-      // on_field_change(field_to_str(field))
 
       set_url()
       get_new_gens()
@@ -772,8 +790,8 @@
       subfield_el.innerHTML = newLines.join('\n')
     }
 
-
-
+    // http://localhost:8080/tiny/symcon/?tempo=125&field=__XXXXXX-74-XXXXXX-13-22222222222222222222222222222222222222222-20-XXXXXX-74-XXXXXX-13-1111111-31-00000-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00000-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00__0-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00__0-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00000-19-AAAA_ZZZZZ-8-1111111-31-00000-19-AAAA_ZZZZZ-8-111-18-EEE-4-9999-10-0-19-AAAA_ZZZZZ-8-111-18-EEE-4-9999-30-AAAA_ZZZZZ-8-111-39-0-24-ZZZZZ-46-00000-24-ZZZZZ-30-AAAA-4-99999-3-00000-24-ZZZZZ-7-999999-3-999999-8-AAAA-4-99999-3-00000-36-999999-3-999999-24-00000-36-999999-3-999999-6-CCCCC-5-99999-3-00000-36-999999-3-999999-6-CCCCC-5-99999-3-00000-24-ZZZZZ-467-
+    // http://localhost:8080/tiny/symcon/?tempo=125&field=__AAAA-6-9999-66-AAAA-6-9999-31-HHHHH-8-6666-63-HHHHH-8-6666-63-HHHHH-8-6666-76-6666-390-JJJJJJJJJJ-5-44444444444-54-LLLLLLLLLL-5-55555555555-7-BBBBBBBBB-10-444444444444-16-MMMMMMMMMM-5-66666666666-7-BBBBBBBBB-10-444444444444-49-BBBBBBBBB-10-444444444444-49-BBBBBBBBB-10-444444444444-14-QQQQQQQQQ-69-QQQQQQQQQQQ-69-OOOOOOOOOOO-6-1111111111111-6-DDDDDDDDDD-10-22222222222222-10-OOOOOOOOOOO-6-1111111111111-6-DDDDDDDDDD-10-22222222222222-10-WWWWWWWWWW-7-1111111111111-6-DDDDDDDDDD-10-22222222222222-11-WWWWWWWWW-7-2222222222222-6-DDDDD-24-22222-8-YYYYYYYYYYYY-7-2222222222222-6-DDDDD-39-YYYYYYYYYY-7-1111111111111-40-ZZZZZZZZZZZZZZZZZZZZ-7-1111111111111-40-ZZZZZZZZZZZZZZZZZZZZ-7-1111111111111
   </script>
 </body>
 
