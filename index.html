@@ -93,22 +93,14 @@
     - later, allow control over individual sounds / effects
 
     TODO:
-    -- why does it remove symbols when adding?
-    -- why does it stretch out the saved version? (goodness gracious!)
-    -- modulo adjustment (1 to 32)
-    -- spaces should space 
-    -- try funny shapes
-    -- Enter to play
-    -- fix borked saves
-    - make new better saves
-    -- rainbow spectrum
-    !- bold generators
-    -- change freqs
-    - longer visual range?
-    - "walls"?
+    -- fader
+    -- drag fader
+    -- set tempo+volume with fader
+    -- new url style
+    -- make new better saves
     - put it online!
-    - only stringify field at edge
-      - and use a function for it 
+    - "walls"?
+    - ESCAPEESCAPEESCAPE
     
   -->
 
@@ -129,14 +121,18 @@
   <pre style="display: inline">BPM</pre>
   <pre id="tempo" contenteditable="true" style="display:inline; width:3em">125</pre>
   <pre style="display: inline">Volume</pre>
-  <pre id="volume" contenteditable="true" style="display:inline; width:3em">5</pre>
+  <pre id="volume" contenteditable="true" style="display:inline; width:3em">50</pre>
 
   <pre id="freqq"></pre>
 
   <pre id="clear-button"   class="link">Clear</pre>
-  <pre id="preset1-button" class="link">HazyL</pre>
-  <pre id="preset2-button" class="link">Predawn</pre>
-  <pre id="preset3-button" class="link">Firescape</pre>
+  <pre id="preset1-button" class="link">HissHum</pre>
+  <pre id="preset2-button" class="link">Five</pre>
+  <pre id="preset3-button" class="link">HazyL</pre>
+  <pre id="preset4-button" class="link">Predawn</pre>
+  <pre id="preset5-button" class="link">Firescape</pre>
+
+  <div id="fader" style="width: 100px; height: 100px; background-color: aliceblue;"></div>
 
   <script>
     let el = document.getElementById.bind(document)
@@ -145,6 +141,7 @@
     let selectfield_el = el('selectfield')
 
     let tempo = 125
+    let volume = 50
     let modmax = 32
     let generators = []
     let field_length = 80
@@ -593,13 +590,14 @@
     }
 
     function get_uri_params() {
-      return 0,
-        window.location.search
-          .substring(1)
-          .split('&')
-          .reduce(function (acc, item) {
-            return item ? add_value.apply(null, item.split('=').concat([acc])) : acc
-          }, {})
+      return break_hash(window.location.hash.substring(1))
+    }
+
+    function break_hash(hash) {
+      return hash.split('&')
+                 .reduce(function (acc, item) {
+                   return item ? add_value.apply(null, item.split('=').concat([acc])) : acc
+                 }, {})
     }
 
     function add_value(key, value, acc) {
@@ -607,20 +605,26 @@
       return acc
     }
 
+    function set_stuff(params) {
+      set_tempo(params.tempo || tempo)
+      set_volume(params.volume || volume)
+      set_field(params.field || presets[0])
+    }
 
+    let urlTimeout
     function set_url() {
-      let url_string = fieldstr_to_url_string(field_to_str(field))
-      let state = {tempo, url_string}
-      history.pushState(state, '', '?tempo=' + tempo + '&field=' + url_string)
+      clearTimeout(urlTimeout)
+      urlTimeout = setTimeout(() => {
+        let url_string = fieldstr_to_url_string(field_to_str(field))
+        history.pushState({tempo, volume, url_string}, '', '#tempo=' + tempo + '&volume=' + volume + '&field=' + url_string)
+      }, 100)
     }
 
     function set_field(url_string) {
       let fieldstr = url_string_to_field(url_string)
       stop()
-      // set_url(url_string, tempo)
       draw_field(fieldstr)
       import_field(fieldstr)
-      // run()
     }
 
     function draw_field(field) {
@@ -638,10 +642,14 @@
 
     function set_tempo(value) {
       tempo = clamp(10, +value, 1000) || 125 // BPM
+      el('tempo').textContent = tempo
     }
 
     function set_volume(value) {
-      maingain.gain.value = (clamp(0, +value, 100) || 5) / 100
+      volume = clamp(0, +value, 1000) || volume
+      if(maingain)
+        maingain.gain.value = volume / 100
+      el('volume').textContent = volume
     }
 
     function plause() {
@@ -650,14 +658,18 @@
     }
 
     function setup_presets() {
-      presets[0] = 'A-18-9-140-CCCCC-19-33333-51-CCCCC-19-33333-131-EEEEE-20-4444-136-WW-78-WW-78-WW-78-WW-41-MM-8-4-26-WW-41-OO-6-7-28-WW-41-QQ-7-5-27-WW-233-ZZZZ-12-1111-60-ZZZZ-12-1111-24-DD-6-2-27-ZZZZ-12-1111-24-DD-6-22-26-ZZZZ-12-1111-60-ZZZ-13-111-61-'
-      presets[1] = 'AAAAAAA-11-33333333-54-CCCCCCC-19-33333333-46-EEEEEEE-27-33333333-678-KKKKKKKK-24-11111111-40-KKKKKKKK-24-11111111-40-KKKKKKKK-24-11111111-200-'
-      presets[2] = '-6-Q-29-9-57-S-20-2-127-5-26-TT-51-5-22-4-56-3-13-XX-64-3-8-8-239-2-93-GG-6-9-79-9-45-AA-14-MM-4-7-11-9-45-AA-32-9-5-11-78-11-38-'
-      
+      presets[0] = 'tempo=120&volume=630&field=__AAAA-6-9999-66-AAAA-6-9999-31-HHHHH-8-6666-63-HHHHH-8-6666-63-HHHHH-8-6666-76-6666-390-JJJJJJJJJJ-5-44444444444-54-LLLLLLLLLL-5-55555555555-7-BBBBBBBBB-10-444444444444-16-MMMMMMMMMM-5-66666666666-7-BBBBBBBBB-10-444444444444-49-BBBBBBBBB-10-444444444444-49-BBBBBBBBB-10-444444444444-14-QQQQQQQQQ-69-QQQQQQQQQQQ-69-OOOOOOOOOOO-6-1111111111111-6-DDDDDDDDDD-10-22222222222222-10-OOOOOOOOOOO-6-1111111111111-6-DDDDDDDDDD-10-22222222222222-10-WWWWWWWWWW-7-1111111111111-6-DDDDDDDDDD-10-22222222222222-11-WWWWWWWWW-7-2222222222222-6-DDDDD-24-22222-8-YYYYYYYYYYYY-7-2222222222222-6-DDDDD-39-YYYYYYYYYY-7-1111111111111-40-ZZZZZZZZZZZZZZZZZZZZ-7-1111111111111-40-ZZZZZZZZZZZZZZZZZZZZ-7-1111111111111'
+      presets[1] = 'tempo=125&volume=100&field=__XXXXXX-74-XXXXXX-13-22222222222222222222222222222222222222222-20-XXXXXX-74-XXXXXX-13-1111111-31-00000-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00000-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00__0-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00__0-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00000-19-AAAA_ZZZZZ-8-1111111-31-00000-19-AAAA_ZZZZZ-8-111-18-EEE-4-9999-10-0-19-AAAA_ZZZZZ-8-111-18-EEE-4-9999-30-AAAA_ZZZZZ-8-111-39-0-24-ZZZZZ-46-00000-24-ZZZZZ-30-AAAA-4-99999-3-00000-24-ZZZZZ-7-999999-3-999999-8-AAAA-4-99999-3-00000-36-999999-3-999999-24-00000-36-999999-3-999999-6-CCCCC-5-99999-3-00000-36-999999-3-999999-6-CCCCC-5-99999-3-00000-24-ZZZZZ-467-'
+      presets[2] = 'tempo=240&volume=150&field=A-18-9-140-CCCCC-19-33333-51-CCCCC-19-33333-131-EEEEE-20-4444-136-WW-78-WW-78-WW-78-WW-41-MM-8-4-26-WW-41-OO-6-7-28-WW-41-QQ-7-5-27-WW-233-ZZZZ-12-1111-60-ZZZZ-12-1111-24-DD-6-2-27-ZZZZ-12-1111-24-DD-6-22-26-ZZZZ-12-1111-60-ZZZ-13-111-61-'
+      presets[3] = 'tempo=240&volume=370&field=AAAAAAA-11-33333333-54-CCCCCCC-19-33333333-46-EEEEEEE-27-33333333-678-KKKKKKKK-24-11111111-40-KKKKKKKK-24-11111111-40-KKKKKKKK-24-11111111-200-'
+      presets[4] = 'tempo=240&volume=180&field=-6-Q-29-9-57-S-20-2-127-5-26-TT-51-5-22-4-56-3-13-XX-64-3-8-8-239-2-93-GG-6-9-79-9-45-AA-14-MM-4-7-11-9-45-AA-32-9-5-11-78-11-38-'
+
       el('clear-button').onclick = function (e) { set_field(" ") }
-      el('preset1-button').onclick = function (e) { set_field(presets[0]) }
-      el('preset2-button').onclick = function (e) { set_field(presets[1]) }
-      el('preset3-button').onclick = function (e) { set_field(presets[2]) }
+      el('preset1-button').onclick = function (e) { set_stuff(break_hash(presets[0])) }
+      el('preset2-button').onclick = function (e) { set_stuff(break_hash(presets[1])) }
+      el('preset3-button').onclick = function (e) { set_stuff(break_hash(presets[2])) }
+      el('preset4-button').onclick = function (e) { set_stuff(break_hash(presets[3])) }
+      el('preset5-button').onclick = function (e) { set_stuff(break_hash(presets[4])) }
     }
 
     function init() {
@@ -665,8 +677,7 @@
       spaceel(selectfield_el)
       setup_presets()
       let params = get_uri_params()
-      set_tempo(params.tempo || tempo)
-      set_field(params.field || presets[0])
+      set_stuff(params)
       run()
       drawSpectrum(Array(64).fill(0))
     }
@@ -674,8 +685,8 @@
     // DOM bindings
     document.addEventListener('DOMContentLoaded', function () {
       el('plause').onclick = function (e) {plause()}
-      el('tempo').oninput = function (e) {set_tempo(e.target.textContent)}
-      el('volume').oninput = function (e) {set_volume(e.target.textContent)}
+      el('tempo').oninput = function (e) {set_tempo(e.target.textContent); set_url()}
+      el('volume').oninput = function (e) {set_volume(e.target.textContent); set_url()}
 
       document.body.addEventListener('click', function () { // Audio context needs to be resumed after user interaction
         audio_setup()
@@ -699,6 +710,30 @@
         if(!selectfield_el.contains(e.target)) 
           clear_select()
       })
+
+      // fader
+      let dragging = false
+
+      el('fader').addEventListener('mousedown', e => {
+        dragging = true
+        update(e)
+      })
+
+      el('fader').addEventListener('mousemove', e => {
+        if(dragging) update(e)
+      })
+
+      window.addEventListener('mouseup', () => {
+        dragging = false
+      })
+
+      function update(e) {
+        let t = Math.floor(e.offsetX * 10)
+        let v = Math.floor((100 - e.offsetY) * 10)
+        set_tempo(t)
+        set_volume(v)
+        set_url()
+      }
 
       init()
     })
@@ -790,9 +825,6 @@
       subfield_el.innerHTML = newLines.join('\n')
     }
 
-    // http://localhost:8080/tiny/symcon/?tempo=125&field=__XXXXXX-74-XXXXXX-13-22222222222222222222222222222222222222222-20-XXXXXX-74-XXXXXX-13-1111111-31-00000-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00000-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00__0-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00__0-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00000-19-AAAA_ZZZZZ-8-1111111-31-00000-19-AAAA_ZZZZZ-8-111-18-EEE-4-9999-10-0-19-AAAA_ZZZZZ-8-111-18-EEE-4-9999-30-AAAA_ZZZZZ-8-111-39-0-24-ZZZZZ-46-00000-24-ZZZZZ-30-AAAA-4-99999-3-00000-24-ZZZZZ-7-999999-3-999999-8-AAAA-4-99999-3-00000-36-999999-3-999999-24-00000-36-999999-3-999999-6-CCCCC-5-99999-3-00000-36-999999-3-999999-6-CCCCC-5-99999-3-00000-24-ZZZZZ-467-
-    // http://localhost:8080/tiny/symcon/?tempo=125&field=__AAAA-6-9999-66-AAAA-6-9999-31-HHHHH-8-6666-63-HHHHH-8-6666-63-HHHHH-8-6666-76-6666-390-JJJJJJJJJJ-5-44444444444-54-LLLLLLLLLL-5-55555555555-7-BBBBBBBBB-10-444444444444-16-MMMMMMMMMM-5-66666666666-7-BBBBBBBBB-10-444444444444-49-BBBBBBBBB-10-444444444444-49-BBBBBBBBB-10-444444444444-14-QQQQQQQQQ-69-QQQQQQQQQQQ-69-OOOOOOOOOOO-6-1111111111111-6-DDDDDDDDDD-10-22222222222222-10-OOOOOOOOOOO-6-1111111111111-6-DDDDDDDDDD-10-22222222222222-10-WWWWWWWWWW-7-1111111111111-6-DDDDDDDDDD-10-22222222222222-11-WWWWWWWWW-7-2222222222222-6-DDDDD-24-22222-8-YYYYYYYYYYYY-7-2222222222222-6-DDDDD-39-YYYYYYYYYY-7-1111111111111-40-ZZZZZZZZZZZZZZZZZZZZ-7-1111111111111-40-ZZZZZZZZZZZZZZZZZZZZ-7-1111111111111
   </script>
 </body>
-
 </html>
