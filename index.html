@@ -94,10 +94,15 @@
 
     TODO:
     -- why does it remove symbols when adding?
-    - why does it stretch out the saved version? 
+    -- why does it stretch out the saved version? (goodness gracious!)
+    - modulo adjustment (1 to 32)
     - spaces should space 
     - try funny shapes
     - "walls"
+    - rainbow spectrum
+    - bold generators
+    - change freqs
+    - put it online!
     - only stringify field at edge
       - and use a function for it 
     
@@ -136,6 +141,7 @@
     let selectfield_el = el('selectfield')
 
     let tempo = 125
+    let modmax = 32
     let generators = []
     let field_length = 80
     let field_rows = 24
@@ -262,40 +268,6 @@
 
           pairs.forEach(([py, px]) => copy[py][px] = ' ')
           generators.push({count: pairs.length, note: char, row: y, coll: x, colr: rx})
-
-            // // how big is it?
-            // let c = copy[y][x]
-            //   , row = y
-            //   , col = x + 1
-            //   , count = 1
-            //   , width = 1
-
-          //   copy[y][x] = ' '
-          //   while(row < copy.length && col < copy[0].length) {
-          //     if(c != copy[row][col]) {
-          //       if(col == x) {
-          //         generators.push({count: count, note: c, row: y, col: x, width: width})
-          //         count = 0
-          //         break
-          //       }
-          //       width = width > 1 ? width : col - x
-          //       row++
-          //       col = x
-          //       continue
-          //     }
-
-          //     copy[row][col] = ' '
-          //     if(++col == copy[0].length) {
-          //       width = width > 1 ? width : col - x
-          //       row++
-          //       col = x
-          //     }
-          //     count++
-          //   }
-          //   if(count) {
-          //     generators.push({count: count, note: c, row: y, col: x, width: width})
-          //   }
-          // }
         }
       }
     }
@@ -438,7 +410,7 @@
           , is_alpha = /[A-Z]/.test(gen.note)
           , spawn_row = gen.row // bound(is_alpha ? gen.row - 1 : gen.row, field_rows)
           , spawn_col = bound(is_alpha ? gen.colr + 1 : gen.coll - 1, field_length)
-          , modulo = (21 - Math.min(gen.count, 20)) // * 5
+          , modulo = 1 + modmax - Math.min(gen.count, modmax)
 
         if(!(time % modulo)) {
           // copy[gen.row - 1 < 0 ? copy.length-1 : gen.row - 1][gen.col] = // TODO: look before we smash
@@ -578,25 +550,28 @@
     //// field management
 
     function fieldstr_to_url_string(fieldstr) {
-      return 0,
-        fieldstr
-          .replace(/(.{1,80}).*/g,                             // coerce line lengths TODO: maybe just truncate?
-            function (m, p1) {
-              return p1 +
-                Array(field_length - p1.length)
-                  .join(' ')
-            })
-          .replace(/[^A-Z0-9]/g, ' ')                          // only keep generators
-          .replace(/ /g, '_')                                  // spaces aren't uriable
-          .replace(/_(_+)_/g,                                  // compress long spaces
-            function (match, inner) {return '-' + inner.length + '_'})
+      let lines = fieldstr.split("\n")
+
+      lines = lines.map(line => {
+        line = line.replace(/[^A-Z0-9]/g, ' ')                 // only keep generators
+        line = line.slice(0, field_length)                     // truncate
+        if(line.length < field_length)                         // pad
+          line = line + Array(field_length - line.length).fill(" ").join('')
+        return line
+      })
+
+      let str = lines.join('').replace(/ /g, '_')              // spaces aren't uriable
+      str = str.replace(/_(_+)_/g,                             // compress long spaces
+            function (match, inner) {return '-' + (inner.length + 2) + '-'})
+
+      return str
     }
 
-    function url_string_to_field(string) {
+    function url_string_to_field(url_string) {
       return 0,
-        string
-          .replace(/-(\d+)_/g,                                 // decompress spaces
-            function (match, inner) {return Array(+inner + 3).join('_')})
+        url_string
+          .replace(/-(\d+)-/g,                                 // decompress spaces
+            function (match, inner) {return Array(+inner).fill('_').join('')})
           .replace(/_/g, ' ')
           .replace(RegExp('.{' + field_length + '}', 'g'), "$&\n")
     }
