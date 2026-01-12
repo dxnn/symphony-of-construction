@@ -1,9 +1,16 @@
-symphony-of-construction
+Symphony of Construction
 ========================
 
 A browser-based zero-player roguelike cellular automata sequencer.
 
-Try it here: http://toytemp.com/symcon
+Try it here: https://bathro.be/symcon
 
-Click 'Preset 3', then 'start'.
+Press Enter to start.
 
+Select and letter or number to add a generator.
+
+Blue pad in the corner does stuff.
+
+Font size is "responsive".
+
+URLs are save points.
