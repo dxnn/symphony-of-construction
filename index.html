@@ -78,6 +78,10 @@
       cursor: pointer;
       display: inline;
     }
+
+    #freqq {
+      user-select: none;
+    }
       
   </style>
 </head>
@@ -134,7 +138,7 @@
   <pre id="preset6-button" class="link">Miasma</pre>
   <pre id="preset7-button" class="link">PredawnC</pre>
 
-  <div id="fader" style="width: 100px; height: 100px; background-color: aliceblue;"></div>
+  <!-- <div id="fader" style="width: 100px; height: 100px; background-color: aliceblue;"></div> -->
 
   <script>
     let el = document.getElementById.bind(document)
@@ -735,12 +739,12 @@
       // fader
       let dragging = false
 
-      el('fader').addEventListener('mousedown', e => {
+      el('freqq').addEventListener('mousedown', e => {
         dragging = true
         update(e)
       })
 
-      el('fader').addEventListener('mousemove', e => {
+      el('freqq').addEventListener('mousemove', e => {
         if(dragging) update(e)
       })
 
@@ -749,8 +753,10 @@
       })
 
       function update(e) {
-        let t = Math.floor(e.offsetX * 10)
-        let v = Math.floor((100 - e.offsetY) * 10)
+        let h = el('freqq').offsetHeight
+        let w = el('freqq').offsetWidth
+        let v = Math.floor((1 - e.offsetY / h) * 1000)
+        let t = Math.floor((e.offsetX / w) * 1000) // 
         set_tempo(t)
         set_volume(v)
         set_url()
