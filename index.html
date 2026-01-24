@@ -178,15 +178,6 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
             ,  960, 1080, 1200, 1280, 1440, 1600,  1800        // O-U
             , 3840, 4320, 4800, 5120, 5760, 6400,  7200]       // V-Y
 
-    // -- add walls
-    // -- save walls
-    // -- better save compression
-    // -- url freqs?
-    // -- cancel clock
-    // - push to repo
-    // - push to bathro.be
-    // - tell folks (d, d, be, js)
-
     // set up the audio nodes
     function audio_setup() {
       if(context && context.state === 'suspended') 
@@ -387,13 +378,13 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
               , col_min = Math.max(x - distance, 0)
               , col_max = Math.min(x + distance, field[y].length - 1)
 
-            for(var i = col_min; i <= col_max; i++) {          // top
+            for(var i = col_min; i <= col_max; i++) {          // look around you
               if(other.test(field[row_min][i]))
                 if(trytrymove(y, x, row_min - y, i - x))
                   break do_movement
             }
 
-            for(var i = row_min; i <= row_max; i++) {          // sides
+            for(var i = row_min; i <= row_max; i++) {          // now take a closer look
               if(other.test(field[i][col_min])) {
                 if(trytrymove(y, x, i - y, col_min - x))
                   break do_movement
@@ -404,7 +395,7 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
               }
             }
 
-            for(var i = col_min; i <= col_max; i++) {          // bottom
+            for(var i = col_min; i <= col_max; i++) {          // have you worked out what we're looking for?
               if(other.test(field[row_max][i])) {
                 if(trytrymove(y, x, row_max - y, i - x))
                   break do_movement
@@ -525,9 +516,7 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
       })
 
       let str = lines.join('').replace(/ /g, '_')              // spaces aren't uriable
-      // str = str.replace(/_(_+)_/g,                             // compress runs
-            // function (match, inner) {return '-' + (inner.length + 2) + '-'})
-      str = str.replace(/(.)\1+/g, 
+      str = str.replace(/(.)\1+/g,                             // compress runs
             function (s, char) {return 'x' + char + (s.length) + 'y'})
 
       return str
@@ -536,8 +525,6 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
     function url_string_to_field(url_string) {
       return 0,
         url_string
-          // .replace(/-(\d+)-/g,                                 // decompress spaces
-          //   function (match, inner) {return Array(+inner).fill('_').join('')})
           .replace(/x(.)(\d+)y/g,                                 // decompress runs
             function (s, char, l) {return Array(+l).fill(char).join('')})
           .replace(/_/g, ' ')
