@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -139,14 +138,17 @@ Default frequencies are in a major key
 Can hack in url but might get weird
 Z is always noise
 
-800 lines, no dependencies, single index.html file
+8kb zipped, no dependencies, no database, no network
+Just a single index.html file, run it local if you'd like
+Written in an afternoon for Music Hack Day 2014
+Cleaned up for Cool New Instrument Night 2026
 
 The spectrum is also a tempo/volume fader
 
 Cellular automata movement means compositions are deterministic
-But overdriven gain sounds different in different browsers
+But overdriven gain sounds different between browsers
 
-Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony-of-construction">github</a>    
+Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony-of-construction">github</a> or wherever
   </div>
 
   <script>
@@ -171,6 +173,19 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
     let setup_done = false
     let helping = false
 
+    freqs = [   60, 67.5,   75,   80,   90,  100, 112.5        // A-G
+            ,  240,  270,  300,  320,  360,  400,   450        // H-N
+            ,  960, 1080, 1200, 1280, 1440, 1600,  1800        // O-U
+            , 3840, 4320, 4800, 5120, 5760, 6400,  7200]       // V-Y
+
+    // -- add walls
+    // -- save walls
+    // -- better save compression
+    // -- url freqs?
+    // -- cancel clock
+    // - push to repo
+    // - push to bathro.be
+    // - tell folks (d, d, be, js)
 
     // set up the audio nodes
     function audio_setup() {
@@ -199,10 +214,6 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
       oscs = []
       gains = []
       filters = {}
-      freqs = [60, 67.5, 75, 80, 90, 100, 112.5                // A-G
-             , 240,  270,  300,  320,  360,  400,  450         // H-N
-             , 960,  1080, 1200, 1280, 1440, 1600, 1800        // O-U
-             , 3840, 4320, 4800, 5120, 5760, 6400, 7200]       // V-Y
 
       for(var i = 0; i < 25; i++) {
         var gain = context.createGain()
@@ -268,7 +279,7 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
       field = make_field(
         field_string
           .replace(/[a-z&'()*+,\-.\/]/g, ' ')
-          .replace(/[^ A-Z0-9\n]/g, '')
+          .replace(/[^ A-Z0-9|_\n]/g, '')
           .split("\n")
           .map(function (line) {
             line = line.slice(0, field_length)
@@ -505,7 +516,8 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
       let lines = fieldstr.split("\n")
 
       lines = lines.map(line => {
-        line = line.replace(/[^A-Z0-9]/g, ' ')                 // only keep generators
+        line = line.replace(/[^A-Z0-9|_]/g, ' ')               // only keep generators & walls
+        line = line.replace(/_/g, '.').replace(/\|/g, '~')     // swap walls
         line = line.slice(0, field_length)                     // truncate
         if(line.length < field_length)                         // pad
           line = line + Array(field_length - line.length).fill(" ").join('')
@@ -513,8 +525,10 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
       })
 
       let str = lines.join('').replace(/ /g, '_')              // spaces aren't uriable
-      str = str.replace(/_(_+)_/g,                             // compress long spaces
-            function (match, inner) {return '-' + (inner.length + 2) + '-'})
+      // str = str.replace(/_(_+)_/g,                             // compress runs
+            // function (match, inner) {return '-' + (inner.length + 2) + '-'})
+      str = str.replace(/(.)\1+/g, 
+            function (s, char) {return 'x' + char + (s.length) + 'y'})
 
       return str
     }
@@ -522,9 +536,13 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
     function url_string_to_field(url_string) {
       return 0,
         url_string
-          .replace(/-(\d+)-/g,                                 // decompress spaces
-            function (match, inner) {return Array(+inner).fill('_').join('')})
+          // .replace(/-(\d+)-/g,                                 // decompress spaces
+          //   function (match, inner) {return Array(+inner).fill('_').join('')})
+          .replace(/x(.)(\d+)y/g,                                 // decompress runs
+            function (s, char, l) {return Array(+l).fill(char).join('')})
           .replace(/_/g, ' ')
+          .replace(/~/g, '|')
+          .replace(/\./g, '_')
           .replace(RegExp('.{' + field_length + '}', 'g'), "$&\n")
     }
 
@@ -548,6 +566,15 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
       set_tempo(params.tempo || tempo)
       set_volume(params.volume || volume)
       set_field(params.field || presets[0])
+      set_freqs(params.freqs)
+      time = 0
+    }
+
+    function set_freqs(freqstr) {
+      if(!freqstr || !freqstr.split) return
+      let fs = freqstr.split(',')
+      if(!fs.length) return
+      freqs = freqs.map((f,i) => fs[i] ? +fs[i] : f)
     }
 
     let urlTimeout
@@ -604,13 +631,13 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
     }
 
     function setup_presets() {
-      presets[0] = 'tempo=120&volume=630&field=__AAAA-6-9999-66-AAAA-6-9999-31-HHHHH-8-6666-63-HHHHH-8-6666-63-HHHHH-8-6666-76-6666-390-JJJJJJJJJJ-5-44444444444-54-LLLLLLLLLL-5-55555555555-7-BBBBBBBBB-10-444444444444-16-MMMMMMMMMM-5-66666666666-7-BBBBBBBBB-10-444444444444-49-BBBBBBBBB-10-444444444444-49-BBBBBBBBB-10-444444444444-14-QQQQQQQQQ-69-QQQQQQQQQQQ-69-OOOOOOOOOOO-6-1111111111111-6-DDDDDDDDDD-10-22222222222222-10-OOOOOOOOOOO-6-1111111111111-6-DDDDDDDDDD-10-22222222222222-10-WWWWWWWWWW-7-1111111111111-6-DDDDDDDDDD-10-22222222222222-11-WWWWWWWWW-7-2222222222222-6-DDDDD-24-22222-8-YYYYYYYYYYYY-7-2222222222222-6-DDDDD-39-YYYYYYYYYY-7-1111111111111-40-ZZZZZZZZZZZZZZZZZZZZ-7-1111111111111-40-ZZZZZZZZZZZZZZZZZZZZ-7-1111111111111'
-      presets[1] = 'tempo=125&volume=100&field=__XXXXXX-74-XXXXXX-13-22222222222222222222222222222222222222222-20-XXXXXX-74-XXXXXX-13-1111111-31-00000-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00000-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00__0-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00__0-19-AAAA-14-1111111-11-MMMMMMMMMMMMMMM-5-00000-19-AAAA_ZZZZZ-8-1111111-31-00000-19-AAAA_ZZZZZ-8-111-18-EEE-4-9999-10-0-19-AAAA_ZZZZZ-8-111-18-EEE-4-9999-30-AAAA_ZZZZZ-8-111-39-0-24-ZZZZZ-46-00000-24-ZZZZZ-30-AAAA-4-99999-3-00000-24-ZZZZZ-7-999999-3-999999-8-AAAA-4-99999-3-00000-36-999999-3-999999-24-00000-36-999999-3-999999-6-CCCCC-5-99999-3-00000-36-999999-3-999999-6-CCCCC-5-99999-3-00000-24-ZZZZZ-467-'
-      presets[2] = 'tempo=100&volume=360&field=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-3-9999999999999999999999999999999999999-86-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB-3-0000000000000000000000000000000000000-86-CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC-3-0000000000000000000000000000000000000-43-0000000000000000000000000000000000000-6-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF-126-HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH-97-44444444444444-15-MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM-17-44444444444444-66-44444444444444-15-JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ-17-44444444444444-52-22222222222-3-44444444444444-15-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF-3-22222222222-112-CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC-3-666666666666-111-EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE-3-888888888888-111-MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM-3-5555555-116-CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC-3-999999999999-111-'
-      presets[3] = 'tempo=230&volume=350&field=-43-EEEEE-75-EEEEE-36-YYYYY-7-000000-21-EUUUUUUUUUUUUUUUUUUUUUUUU-16-YYYYY-7-000000-8-5555555555555_UUUUUUUUUUUUUUUUUUUUUUUU__K__HHHHH-6-YYYYY-7-000000-8-5555555555555_UUUUUUUUUUUUUUUUUUUUUUUU__K__HHHHH-6-YYYYY_GGGG__000000-22-UUUUUUUUUUUUUUUUUUUUUUUU__K__HHHHH-6-YYYYY-7-000000-48-K-5-111-5-YYYYY-9-JJJJJJJJJJJJJJJJJJJ-4-KKKKKKKKK-3-11111-18-111-19-JJJJJJJJJJJJJJJJJJJ-4-KKKXXXXKK-3-11111-18-111-4-555__ZP__555-16-999-7-KKK99XXKK-3-11111-18-111-37-9999999999K-40-555-13-HHHHHHH-6-YYYYYYYYYYYY-5-11111-6-9999999999__111-35-999UUUUUUUUU-7-11111-6-9999999999__111-37-XXXXXX-11-11111-18-111-14-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA444444AAAAAAAAAAAAAAAAA-8-111-14-AAAAAVVVVVVVVVVVV777777VVVKKKKKKKKKKAAAAAAAAAAAAAAAAAAA-8-111-14-AGGGGVVVVVVVVVVVVVVVVVVVVVAAAAAAAAAAAAGGGGGGGGAAAAAAAAA-8-111-14-AAAAAA99999999AAAAAAAAAAAAAAAAAAA33333AAAAAAAAAAAAAAAAA-8-111-52-888888__555-14-111-22-55555555__CCCC-3-QQ-36-111-27-G__111111664477-35-111-27-G__111111-14-77777777777-16-111-23-TTTTGTTTTTTTTTTTTTTTT-33-111_81-24-G_53-50-'
-      presets[4] = 'tempo=90&volume=150&field=-164-YYYYY-7-000000-22-UUUUUUUUUUUUUUUUUUUUUUUU-16-YYYYY-7-000000-8-5555555555555_UUUUUUUUUUUUUUUUUUUUUUUU__K__HHHHH-6-YYYYY-7-000000-8-5555555555555_UUUUUUUUUUUUUUUUUUUUUUUU__K__HHHHH-6-YYYYY-7-000000-22-UUUUUUUUUUUUUUUUUUUUUUUU__K__HHHHH-6-YYYYY-7-000000-48-K-5-111-5-YYYYY-32-KKKKKKKKK-3-11111-18-111-42-KKKKKKKKK-3-11111-18-111-42-KKKKKKKKK-3-11111-18-111-54-11111-18-111-54-11111-6-9999999999__111-54-11111-6-9999999999__111-54-11111-18-111-14-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-8-111-14-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-8-111-14-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-8-111-14-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-8-111-77-111-32-CCCC-3-QQ-36-111-32-CCCC664477-35-111-77-111-77-111-81-'
-      presets[5] = 'tempo=100&volume=50&field=-325-88888888888-4-AA-72-FFFF-10-8-3-GGGGGKGGGGGGGGG-64-G-5-K-56-DDD-4-88888888888-5-K__AAAAAAAAA-51-G-16-K-62-F-16-K-6-9999999999999999999999-16-HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH-4-K-6-9999999999999999999999-16-HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH-4-K-44-HHHHHHHHHHHHHHHHHHHHHJJJJJJJJJJJJJ_44__AAAAAAAAAAAAAA-27-HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH-15-BBBBBBB-57-C-3-BBBBBBBB-138-99999-613-'
-      presets[6] = 'tempo=240&volume=50&field=-25-JJJJ-40-77666-47-FFFFFFFFF-23-III-21-DDDDDD-10-B-14-444-54-9999-4-B-10-ZZ-67-B-79-B-5-KKKK-70-B-54-HHH-46-HHHHHH_88-22-HHH-46-HHHHHH-4-99999999-11-999-15-888888888-92-5-1074-'
+      presets[0] = "tempo=120&volume=630&field=x_2yxA4yx_6yx94yx_66yxA4yx_6yx94yx_31yxH5yx_8yx64yx_63yxH5yx_8yx64yx_63yxH5yx_8yx64yx_76yx64yx_390yxJ10yx_5yx411yx_54yxL10yx_5yx511yx_7yxB9yx_10yx412yx_16yxM10yx_5yx611yx_7yxB9yx_10yx412yx_49yxB9yx_10yx412yx_49yxB9yx_10yx412yx_14yxQ9yx_69yxQ11yx_69yxO11yx_6yx113yx_6yxD10yx_10yx214yx_10yxO11yx_6yx113yx_6yxD10yx_10yx214yx_10yxW10yx_7yx113yx_6yxD10yx_10yx214yx_11yxW9yx_7yx213yx_6yxD5yx_24yx25yx_8yxY12yx_7yx213yx_6yxD5yx_39yxY10yx_7yx113yx_40yxZ20yx_7yx113yx_40yxZ20yx_7yx113y"
+      presets[1] = "tempo=125&volume=100&field=x_2yxX6yx_74yxX6yx_13yx241yx_20yxX6yx_74yxX6yx_13yx17yx_31yx05yx_19yxA4yx_14yx17yx_11yxM15yx_5yx05yx_19yxA4yx_14yx17yx_11yxM15yx_5yx02yx_2y0x_19yxA4yx_14yx17yx_11yxM15yx_5yx02yx_2y0x_19yxA4yx_14yx17yx_11yxM15yx_5yx05yx_19yxA4y_xZ5yx_8yx17yx_31yx05yx_19yxA4y_xZ5yx_8yx13yx_18yxE3yx_4yx94yx_10y0x_19yxA4y_xZ5yx_8yx13yx_18yxE3yx_4yx94yx_30yxA4y_xZ5yx_8yx13yx_39y0x_24yxZ5yx_46yx05yx_24yxZ5yx_30yxA4yx_4yx95yx_3yx05yx_24yxZ5yx_7yx96yx_3yx96yx_8yxA4yx_4yx95yx_3yx05yx_36yx96yx_3yx96yx_24yx05yx_36yx96yx_3yx96yx_6yxC5yx_5yx95yx_3yx05yx_36yx96yx_3yx96yx_6yxC5yx_5yx95yx_3yx05yx_24yxZ5yx_467y"
+      presets[2] = "tempo=100&volume=360&field=xA34yx_3yx937yx_86yxB34yx_3yx037yx_86yxC34yx_3yx037yx_43yx037yx_6yxF34yx_126yxH34yx_97yx414yx_15yxM34yx_17yx414yx_66yx414yx_15yxJ34yx_17yx414yx_52yx211yx_3yx414yx_15yxF34yx_3yx211yx_112yxC34yx_3yx612yx_111yxE34yx_3yx812yx_111yxM34yx_3yx57yx_116yxC34yx_3yx912yx_111y"
+      presets[3] = "tempo=230&volume=350&field=x_43yxE5yx_75yxE5yx_36yxY5yx_7yx06yx_21yExU24yx_16yxY5yx_7yx06yx_8yx513y_xU24yx_2yKx_2yxH5yx_6yxY5yx_7yx06yx_8yx513y_xU24yx_2yKx_2yxH5yx_6yxY5y_xG4yx_2yx06yx_22yxU24yx_2yKx_2yxH5yx_6yxY5yx_7yx06yx_48yKx_5yx13yx_5yxY5yx_9yxJ19yx_4yxK9yx_3yx15yx_18yx13yx_19yxJ19yx_4yxK3yxX4yxK2yx_3yx15yx_18yx13yx_4yx53yx_2yZPx_2yx53yx_16yx93yx_7yxK3yx92yxX2yxK2yx_3yx15yx_18yx13yx_37yx910yKx_40yx53yx_13yxH7yx_6yxY12yx_5yx15yx_6yx910yx_2yx13yx_35yx93yxU9yx_7yx15yx_6yx910yx_2yx13yx_37yxX6yx_11yx15yx_18yx13yx_14yxA32yx46yxA17yx_8yx13yx_14yxA5yxV12yx76yxV3yxK10yxA19yx_8yx13yx_14yAxG4yxV21yxA12yxG8yxA9yx_8yx13yx_14yxA6yx98yxA19yx35yxA17yx_8yx13yx_52yx86yx_2yx53yx_14yx13yx_22yx58yx_2yxC4yx_3yxQ2yx_36yx13yx_27yGx_2yx16yx62yx42yx72yx_35yx13yx_27yGx_2yx16yx_14yx711yx_16yx13yx_23yxT4yGxT16yx_33yx13y_81x_24yG_53x_50y"
+      presets[4] = "tempo=90&volume=150&field=x_164yxY5yx_7yx06yx_22yxU24yx_16yxY5yx_7yx06yx_8yx513y_xU24yx_2yKx_2yxH5yx_6yxY5yx_7yx06yx_8yx513y_xU24yx_2yKx_2yxH5yx_6yxY5yx_7yx06yx_22yxU24yx_2yKx_2yxH5yx_6yxY5yx_7yx06yx_48yKx_5yx13yx_5yxY5yx_32yxK9yx_3yx15yx_18yx13yx_42yxK9yx_3yx15yx_18yx13yx_42yxK9yx_3yx15yx_18yx13yx_54yx15yx_18yx13yx_54yx15yx_6yx910yx_2yx13yx_54yx15yx_6yx910yx_2yx13yx_54yx15yx_18yx13yx_14yxA55yx_8yx13yx_14yxA55yx_8yx13yx_14yxA55yx_8yx13yx_14yxA55yx_8yx13yx_77yx13yx_32yxC4yx_3yxQ2yx_36yx13yx_32yxC4yx62yx42yx72yx_35yx13yx_77yx13yx_77yx13yx_81y"
+      presets[5] = "tempo=100&volume=50&field=x_325yx811yx_4yxA2yx_72yxF4yx_10y8x_3yxG5yKxG9yx_64yGx_5yKx_56yxD3yx_4yx811yx_5yKx_2yxA9yx_51yGx_16yKx_62yFx_16yKx_6yx922yx_16yxH31yx_4yKx_6yx922yx_16yxH31yx_4yKx_44yxH21yxJ13y_x42yx_2yxA14yx_27yxH31yx_15yxB7yx_57yCx_3yxB8yx_138yx95yx_613y"
+      presets[6] = "tempo=240&volume=50&field=x_25yxJ4yx_40yx72yx63yx_47yxF9yx_23yxI3yx_21yxD6yx_10yBx_14yx43yx_54yx94yx_4yBx_10yxZ2yx_67yBx_79yBx_5yxK4yx_70yBx_54yxH3yx_46yxH6y_x82yx_22yxH3yx_46yxH6yx_4yx98yx_11yx93yx_15yx89yx_92y5x_1074y"
 
       el('clear-button').onclick = function (e) { set_field(" ") }
       presets.forEach((x, i) => {
@@ -650,9 +677,10 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
           plause()
           return
         }
+
         if(!sell_ect.start) return
         let key = e.key.toUpperCase() 
-        if(!/[0-9A-Z ]/.test(key)) return
+        if(!/[0-9A-Z |_]/.test(key)) return
         add_block(key, sell_ect)
         draw_field(field)
         clear_select()
@@ -712,7 +740,7 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
       init()
     })
 
-    // ???
+    // bonus fun
 
     function make_field(box=[]) {
       let sb = spacebox()
@@ -773,7 +801,7 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
       return {row, col}
     }
 
-    function highlightBox(start, end) {                        // Thanks, AI. Thai.
+    function highlightBox(start, end) {                        // Thanks, AI. ThAI.
       const text = subfield_el.textContent
       const lines = text.split('\n')
 
