@@ -378,13 +378,13 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
               , col_min = Math.max(x - distance, 0)
               , col_max = Math.min(x + distance, field[y].length - 1)
 
-            for(var i = col_min; i <= col_max; i++) {          // look around you
+            for(var i = col_min; i <= col_max; i++) {          // take a closer look
               if(other.test(field[row_min][i]))
                 if(trytrymove(y, x, row_min - y, i - x))
                   break do_movement
             }
 
-            for(var i = row_min; i <= row_max; i++) {          // now take a closer look
+            for(var i = row_min; i <= row_max; i++) {          // have you worked out
               if(other.test(field[i][col_min])) {
                 if(trytrymove(y, x, i - y, col_min - x))
                   break do_movement
@@ -395,7 +395,7 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
               }
             }
 
-            for(var i = col_min; i <= col_max; i++) {          // have you worked out what we're looking for?
+            for(var i = col_min; i <= col_max; i++) {          // what we're looking for?
               if(other.test(field[row_max][i])) {
                 if(trytrymove(y, x, row_max - y, i - x))
                   break do_movement
@@ -489,7 +489,7 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
     function run () {
       if(!g_pause)
         run_once()
-      timeout = setTimeout(run, 60 * 1000 / tempo / 4) // 4 quarters
+      timeout = setTimeout(run, 60 * 1000 / tempo / 4)         // 4 quarters
     }
 
     function run_once () {
@@ -601,7 +601,7 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
     }
 
     function set_tempo(value) {
-      tempo = clamp(10, +value, 1000) || 125 // BPM
+      tempo = clamp(10, +value, 1000) || 125                   // BPMish
       el('tempo').textContent = tempo
     }
 
@@ -651,7 +651,7 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
       el('tempo').oninput = function (e) {set_tempo(e.target.textContent); set_url()}
       el('volume').oninput = function (e) {set_volume(e.target.textContent); set_url()}
 
-      document.body.addEventListener('click', function () { // Audio context needs to be resumed after user interaction
+      document.body.addEventListener('click', function () {    // audio context needs to be resumed after user interaction
         audio_setup()
       }, {once: true})
 
@@ -718,7 +718,7 @@ Share your mellifluent masterpieces on <a href="https://github.com/dxnn/symphony
         let h = el('freqq').offsetHeight
         let w = el('freqq').offsetWidth
         let v = Math.floor((1 - e.offsetY / h) * 1000)
-        let t = Math.floor((e.offsetX / w) * 1000) // 
+        let t = Math.floor((e.offsetX / w) * 1000)  
         set_tempo(t)
         set_volume(v)
         set_url()
